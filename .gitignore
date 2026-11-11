@@ -1,0 +1,33 @@
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig*
+credentials*.json
+service-account*.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local data
+*.db
+*.sqlite3
+chroma/
+.chroma/
+eval/results/*.raw.json
+
+# Editors / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
