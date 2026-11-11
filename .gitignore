@@ -31,3 +31,4 @@ eval/results/*.raw.json
 .idea/
 .DS_Store
 Thumbs.db
+chaos/.state/

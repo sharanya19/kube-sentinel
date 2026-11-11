@@ -101,11 +101,19 @@ minikube start --cpus=6 --memory=10g
 | Shop | `kubectl port-forward svc/frontend 8080:80` | http://localhost:8080 |
 | Grafana | `kubectl port-forward -n monitoring svc/kps-grafana 3000:80` | http://localhost:3000 (admin / kube-sentinel) |
 
+Break something on purpose, and put it back:
+
+```bash
+python chaos/chaos.py list
+python chaos/chaos.py break redis-down
+python chaos/chaos.py restore redis-down
+```
+
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
 - [x] Monitoring: Prometheus, Grafana, Alertmanager, Loki, Alloy ([details](monitoring/))
-- [ ] Failure scripts: 5 failure scenarios with known root causes
+- [x] Failure scripts: 5 failure scenarios with known root causes ([details](chaos/))
 - [ ] MCP server: pod, event, log and metric tools
 - [ ] AI agent: LangGraph + Gemini investigation loop
 - [ ] Evaluation: root-cause accuracy across all scenarios
