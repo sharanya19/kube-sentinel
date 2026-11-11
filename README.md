@@ -88,20 +88,23 @@ kube-sentinel/
 
 ## Quick start
 
-**Requirements:** Docker, minikube, kubectl.
+**Requirements:** Docker, minikube, kubectl, Helm.
 
 ```bash
-minikube start --cpus=4 --memory=8g
-./scripts/setup.sh          # Windows: .\scripts\setup.ps1
-kubectl port-forward svc/frontend 8080:80
+minikube start --cpus=6 --memory=10g
+./scripts/setup.sh          # deploys the shop (Windows: .\scripts\setup.ps1)
+./monitoring/install.sh     # Prometheus, Grafana, Alertmanager, Loki, Alloy
 ```
 
-Open http://localhost:8080 to see the shop.
+| UI | Command | URL |
+|---|---|---|
+| Shop | `kubectl port-forward svc/frontend 8080:80` | http://localhost:8080 |
+| Grafana | `kubectl port-forward -n monitoring svc/kps-grafana 3000:80` | http://localhost:3000 (admin / kube-sentinel) |
 
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
-- [ ] Monitoring: Prometheus, Grafana, Alertmanager, Loki
+- [x] Monitoring: Prometheus, Grafana, Alertmanager, Loki, Alloy ([details](monitoring/))
 - [ ] Failure scripts: 5 failure scenarios with known root causes
 - [ ] MCP server: pod, event, log and metric tools
 - [ ] AI agent: LangGraph + Gemini investigation loop
