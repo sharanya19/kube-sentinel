@@ -88,7 +88,7 @@ kube-sentinel/
 
 ## Quick start
 
-**Requirements:** Docker, minikube, kubectl, Helm.
+**Requirements:** Docker, minikube, kubectl, Helm, Python 3.11+.
 
 ```bash
 minikube start --cpus=6 --memory=10g
@@ -109,12 +109,19 @@ python chaos/chaos.py break redis-down
 python chaos/chaos.py restore redis-down
 ```
 
+See what the AI will see, through the MCP server:
+
+```bash
+python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.txt
+python -m mcp_server.try_tools                # cluster_overview
+```
+
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
 - [x] Monitoring: Prometheus, Grafana, Alertmanager, Loki, Alloy ([details](monitoring/))
 - [x] Failure scripts: 5 failure scenarios with known root causes ([details](chaos/))
-- [ ] MCP server: pod, event, log and metric tools
+- [x] MCP server: 15 read-only investigation tools + 3 opt-in fix actions ([details](mcp_server/))
 - [ ] AI agent: LangGraph + Gemini investigation loop
 - [ ] Evaluation: root-cause accuracy across all scenarios
 - [ ] RAG runbooks
