@@ -22,6 +22,23 @@ loki:
   compactor:
     retention_enabled: true
     delete_request_store: filesystem
+  # Log-based alerts (loki-rules.yaml): rule files land in /rules/<tenant>/ via the rules sidecar.
+  rulerConfig:
+    storage:
+      type: local
+      local:
+        directory: /rules
+    rule_path: /var/loki/ruler-scratch
+    alertmanager_url: http://kps-kube-prometheus-stack-alertmanager.monitoring.svc.cluster.local:9093
+    enable_alertmanager_v2: true
+    enable_api: true
+    evaluation_interval: 30s
+    wal:
+      dir: /var/loki/ruler-wal
+
+sidecar:
+  rules:
+    folderAnnotation: k8s-sidecar-target-directory
 
 singleBinary:
   replicas: 1

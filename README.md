@@ -25,7 +25,7 @@ flowchart TD
     A[Online Boutique<br/>11 microservices] -->|metrics| P[Prometheus]
     A -->|logs| L[Loki]
     P --> AM[Alertmanager]
-    AM -->|webhook: alert fired| AG[Kube-Sentinel Agent<br/>LangGraph + Gemini]
+    AM -->|alerts| AG[Kube-Sentinel Agent<br/>LangGraph + Gemini]
     AG <-->|tool calls| MCP[MCP Server]
     MCP --> K[Kubernetes API<br/>pods, events, deployments]
     MCP --> P
@@ -81,7 +81,6 @@ kube-sentinel/
 ├── mcp_server/   # tools the agent uses to read cluster data
 ├── agent/        # LangGraph investigation agent
 ├── runbooks/     # fix guides searched with RAG
-├── eval/         # measures how often the agent finds the right cause
 ├── ui/           # Approve / Reject page
 └── docs/         # diagrams, screenshots
 ```
@@ -116,21 +115,27 @@ python -m venv .venv && .venv\Scripts\activate && pip install -r requirements.tx
 python -m mcp_server.try_tools                # cluster_overview
 ```
 
+Let the agent investigate (needs a free [Gemini API key](https://aistudio.google.com) in `.env`, see [agent/](agent/)):
+
+```bash
+python -m agent "Frontend is returning errors"   # one investigation
+python -m agent.watch                            # investigate automatically when alerts fire
+```
+
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
 - [x] Monitoring: Prometheus, Grafana, Alertmanager, Loki, Alloy ([details](monitoring/))
 - [x] Failure scripts: 5 failure scenarios with known root causes ([details](chaos/))
 - [x] MCP server: 15 read-only investigation tools + 3 opt-in fix actions ([details](mcp_server/))
-- [ ] AI agent: LangGraph + Gemini investigation loop
-- [ ] Evaluation: root-cause accuracy across all scenarios
+- [x] AI agent: LangGraph + Gemini investigation loop, alert watcher, fast alert rules ([details](agent/))
 - [ ] RAG runbooks
 - [ ] Approval UI
 - [ ] Demo GIF
 
 ## Results
 
-_Coming soon: root-cause accuracy and time-to-diagnosis across all failure scenarios._
+Agent results per failure scenario (root cause found, fix, time) are in [agent/](agent/#results).
 
 ## License
 

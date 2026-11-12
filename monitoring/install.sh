@@ -27,6 +27,9 @@ helm upgrade --install alloy grafana/alloy \
   --version "$ALLOY_VERSION" -n monitoring \
   -f alloy-values.yaml --wait --timeout 5m
 
+echo "Adding Kube-Sentinel alert rules (metrics + logs)..."
+kubectl apply -f alert-rules.yaml -f loki-rules.yaml
+
 echo
 echo "Done. Open Grafana with:"
 echo "  kubectl port-forward -n monitoring svc/kps-grafana 3000:80"

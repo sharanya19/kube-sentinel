@@ -1,0 +1,34 @@
+# Log-based alert, evaluated by Loki's ruler and sent to Alertmanager.
+# Catches failures that crash nothing (e.g. a wrong service address in an env var), which only
+# show up as errors in the logs. Loaded by Loki's rules sidecar (label loki_rule) into the
+# "fake" tenant folder used when auth is disabled.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kube-sentinel-log-rules
+  namespace: monitoring
+  labels:
+    loki_rule: "1"
+  annotations:
+    k8s-sidecar-target-directory: /rules/fake
+data:
+  shop-log-rules.yaml: |
+    groups:
+      - name: kube-sentinel-shop-logs
+        rules:
+          - alert: ShopErrorLogs
+            # Background noise excluded: rejected visa_electron cards and loadgenerator stats.
+            expr: |
+              sum by (app) (count_over_time(
+                {namespace="default"}
+                  |~ "(?i)(error|exception|fail|refused|timeout|unavailable)"
+                  !~ "(?i)visa"
+                  !~ "# reqs|# fails"
+                [5m])) > 5
+            for: 1m
+            labels:
+              severity: warning
+              team: shop
+              namespace: default
+            annotations:
+              summary: "{{ $labels.app }} is logging errors ({{ $value }} lines in 5 minutes)."

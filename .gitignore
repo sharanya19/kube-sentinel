@@ -32,3 +32,6 @@ eval/results/*.raw.json
 .DS_Store
 Thumbs.db
 chaos/.state/
+
+# agent investigation reports (local output)
+reports/

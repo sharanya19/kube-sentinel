@@ -19,19 +19,22 @@ from . import k8s
 MONITORING_NS = os.getenv("MONITORING_NAMESPACE", "monitoring")
 PROM_SERVICE = os.getenv("PROMETHEUS_SERVICE", "kps-kube-prometheus-stack-prometheus:9090")
 LOKI_SERVICE = os.getenv("LOKI_SERVICE", "loki:3100")
+ALERTMANAGER_SERVICE = os.getenv("ALERTMANAGER_SERVICE", "kps-kube-prometheus-stack-alertmanager:9093")
+SERVICES = {"prom": ("PROMETHEUS_URL", PROM_SERVICE), "loki": ("LOKI_URL", LOKI_SERVICE),
+            "alertmanager": ("ALERTMANAGER_URL", ALERTMANAGER_SERVICE)}
 IGNORED_ALERTS = {"Watchdog", "InfoInhibitor"}
 ERROR_PATTERN = r"(?i)(error|exception|fail|refused|timeout|timed out|panic|fatal|unavailable)"
 # Lines that match ERROR_PATTERN but aren't errors (e.g. the load generator's stats table header).
 NOISE_FILTER = '!~ "# reqs|# fails"'
 
 
-@lru_cache(maxsize=2)
+@lru_cache(maxsize=3)
 def _client(kind: str) -> httpx.Client:
-    direct = os.getenv("PROMETHEUS_URL" if kind == "prom" else "LOKI_URL")
+    env_var, service = SERVICES[kind]
+    direct = os.getenv(env_var)
     if direct:
         return httpx.Client(base_url=direct.rstrip("/"), timeout=20)
     cfg = k8s.api_configuration()
-    service = PROM_SERVICE if kind == "prom" else LOKI_SERVICE
     headers = {}
     if cfg.api_key.get("authorization"):
         prefix = cfg.api_key_prefix.get("authorization", "")
@@ -96,19 +99,23 @@ def query_metrics_range(promql: str, minutes: int = 30, step_seconds: int = 60,
 
 
 def firing_alerts() -> list[dict]:
-    alerts = _get("prom", "/api/v1/alerts", {})["data"]["alerts"]
+    """Active alerts from Alertmanager: Prometheus (metric) alerts and Loki (log) alerts alike."""
+    alerts = _get("alertmanager", "/api/v2/alerts",
+                  {"active": "true", "silenced": "false", "inhibited": "false"})
     rows = []
     for a in alerts:
-        name = a["labels"].get("alertname")
-        if a["state"] != "firing" or name in IGNORED_ALERTS:
+        labels, ann = a.get("labels", {}), a.get("annotations", {})
+        name = labels.get("alertname")
+        if name in IGNORED_ALERTS:
             continue
         rows.append({
             "alert": name,
-            "severity": a["labels"].get("severity"),
-            "namespace": a["labels"].get("namespace"),
-            "target": a["labels"].get("pod") or a["labels"].get("deployment") or a["labels"].get("service"),
-            "summary": a.get("annotations", {}).get("summary") or a.get("annotations", {}).get("description", "")[:200],
-            "since": a.get("activeAt"),
+            "severity": labels.get("severity"),
+            "namespace": labels.get("namespace"),
+            "target": labels.get("pod") or labels.get("deployment") or labels.get("app") or labels.get("service"),
+            "summary": ann.get("summary") or ann.get("description", "")[:200],
+            "since": a.get("startsAt"),
+            "fingerprint": a.get("fingerprint"),
         })
     return rows
 

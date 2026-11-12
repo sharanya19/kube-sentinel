@@ -81,6 +81,20 @@ def cmd_break(args) -> None:
     print(f"Undo with: python chaos/chaos.py restore {s.id}")
 
 
+def delete_broken_replicasets(deployment: str) -> None:
+    """Remove the deployment's inactive ReplicaSets (the broken revision) after a restore.
+
+    Otherwise breaking the same scenario again would re-use the old broken ReplicaSet, which
+    looks like a rollback to an earlier config and muddies the rollout history the agent reads.
+    """
+    data = json.loads(kubectl("get", "replicasets", "-o", "json"))
+    for rs in data["items"]:
+        owners = rs["metadata"].get("ownerReferences", [])
+        if any(o["kind"] == "Deployment" and o["name"] == deployment for o in owners) \
+                and rs["spec"].get("replicas", 0) == 0:
+            kubectl("delete", "replicaset", rs["metadata"]["name"], "--wait=false")
+
+
 def restore_one(scenario_id: str, wait: bool) -> None:
     path = state_file(scenario_id)
     if not path.exists():
@@ -94,6 +108,7 @@ def restore_one(scenario_id: str, wait: bool) -> None:
     if wait:
         print(f"Restoring {snap['deployment']}, waiting for rollout...")
         kubectl("rollout", "status", "deployment", snap["deployment"], "--timeout=300s")
+        delete_broken_replicasets(snap["deployment"])
     path.unlink()
     print(f"RESTORED: {scenario_id}")
 

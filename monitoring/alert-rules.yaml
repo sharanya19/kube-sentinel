@@ -1,0 +1,55 @@
+# Fast alerts for the Online Boutique shop (namespace "default").
+# kube-prometheus-stack's built-in rules wait 15 minutes; these fire within 1-3 minutes
+# so the agent starts investigating while the incident is fresh.
+#
+# Metric alerts (Prometheus) are below; the log alert (Loki) is in loki-rules.yaml.
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: kube-sentinel-shop
+  namespace: monitoring
+spec:
+  groups:
+    - name: kube-sentinel-shop
+      rules:
+        - alert: ShopDeploymentScaledToZero
+          expr: kube_deployment_spec_replicas{namespace="default"} == 0
+          for: 1m
+          labels: {severity: critical, team: shop}
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} is scaled to 0 replicas: nothing is serving it."
+
+        - alert: ShopDeploymentUnavailable
+          expr: |
+            kube_deployment_spec_replicas{namespace="default"} > 0
+            and kube_deployment_status_replicas_available{namespace="default"} == 0
+          for: 1m
+          labels: {severity: critical, team: shop}
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} has no available pods."
+
+        - alert: ShopPodWaiting
+          expr: |
+            max by (namespace, pod, reason) (
+              kube_pod_container_status_waiting_reason{namespace="default",
+                reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull|CreateContainerConfigError|InvalidImageName"}
+            ) > 0
+          for: 1m
+          labels: {severity: warning, team: shop}
+          annotations:
+            summary: "Pod {{ $labels.pod }} is stuck in {{ $labels.reason }}."
+
+        - alert: ShopPodRestarting
+          expr: increase(kube_pod_container_status_restarts_total{namespace="default"}[10m]) >= 2
+          labels: {severity: warning, team: shop}
+          annotations:
+            summary: "Pod {{ $labels.pod }} restarted {{ $value | humanize }} times in 10 minutes."
+
+        - alert: ShopRolloutStuck
+          expr: |
+            kube_deployment_status_replicas_updated{namespace="default"}
+              < kube_deployment_spec_replicas{namespace="default"}
+          for: 3m
+          labels: {severity: warning, team: shop}
+          annotations:
+            summary: "Rollout of {{ $labels.deployment }} is stuck: new pods are not becoming ready."

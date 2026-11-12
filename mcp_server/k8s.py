@@ -279,11 +279,25 @@ def rollout_history(name: str, namespace: str = "default") -> dict[str, Any]:
         prev = {c.name: _container_spec(c) for c in rs_list[-2].spec.template.spec.containers}
         cur = {c.name: _container_spec(c) for c in rs_list[-1].spec.template.spec.containers}
         latest_change = _diff(prev, cur)
-    return {
+    out = {
         "deployment": name,
         "revisions": revisions[:5],
         "latest_revision_changes": latest_change or ["(no previous revision to compare, or no container changes)"],
     }
+    if len(rs_list) >= 2:
+        latest, prev_rs = rs_list[-1], rs_list[-2]
+        # A rollback re-activates an OLD ReplicaSet: Kubernetes records its earlier revision numbers
+        # in "revision-history", and it was created before the ReplicaSet it replaced.
+        reused = bool((latest.metadata.annotations or {}).get("deployment.kubernetes.io/revision-history"))
+        older = latest.metadata.creation_timestamp < prev_rs.metadata.creation_timestamp
+        if reused or older:
+            out["latest_revision_is_rollback"] = True
+            out["note"] = ("The latest revision RETURNED to an earlier configuration that ran before "
+                           "(a rollback / restore). That is usually a recovery, not the cause of an incident; "
+                           "the 'changes' above undo a previous bad change.")
+        else:
+            out["latest_revision_is_rollback"] = False
+    return out
 
 
 # ---------- services ----------
