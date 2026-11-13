@@ -45,10 +45,15 @@ def log(msg: str) -> None:
 async def investigate_now(alerts: list[dict]) -> None:
     text = alert_text(alerts)
     log("Investigating:\n" + text)
-    result = await run_investigation(
-        text, source="alertmanager",
-        on_switch=lambda f, n, why: log(f"{f}: {why}" + (f"; switching to {n}" if n else "")),
-        on_tool=lambda n, a: print(f"    -> {n}({json.dumps(a) if a else ''})", flush=True))
+    try:
+        result = await run_investigation(
+            text, source="alertmanager",
+            on_switch=lambda f, n, why: log(f"{f}: {why}" + (f"; switching to {n}" if n else "")),
+            on_tool=lambda n, a: print(f"    -> {n}({json.dumps(a) if a else ''})", flush=True))
+    except Exception as e:
+        from .models import explain_error
+        log(f"Investigation failed: {explain_error(e)}")
+        return
     r = result["report"]
     log(f"Report {result['id']} ({result['tool_calls']} tool calls, {result['seconds']}s)\n"
         f"{r.to_text()}\n    saved as incident {result['id']}")

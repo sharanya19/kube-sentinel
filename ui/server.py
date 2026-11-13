@@ -26,6 +26,7 @@ from pydantic import BaseModel
 
 from agent import guard, store
 from agent import watch as watcher
+from agent.models import explain_error
 from agent.run import run_investigation, to_json
 from mcp_server import k8s
 
@@ -56,9 +57,9 @@ async def start_investigation(alert: str, source: str) -> str:
                 on_switch=lambda f, n, why: entry["model_switches"].append(f"{f}: {why}"))
             store.save(to_json(result))
             running.pop(temp_id, None)
-        except Exception as e:  # keep the failed entry visible with its error
+        except BaseException as e:  # keep the failed entry visible with a readable reason
             log.exception("investigation failed")
-            entry["error"] = str(e)[:500]
+            entry["error"] = explain_error(e)
             entry["finished_at"] = store.now()
 
     asyncio.create_task(work())

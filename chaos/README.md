@@ -1,8 +1,8 @@
 # Failure scenarios (chaos)
 
 Scripts that break Online Boutique **on purpose**, in ways that happen in real production systems.
-Each scenario has a known correct answer (its *ground truth*), which the [evaluation](../eval/) step
-uses to score the agent.
+Each scenario has a known correct answer (its *ground truth*), used to check the agent's diagnosis
+([results](../agent/#results)).
 
 ## Scenarios
 
@@ -46,4 +46,4 @@ No extra Python packages needed, only `kubectl` pointed at your cluster.
 ## Adding a scenario
 
 Add a `Scenario(...)` entry to `SCENARIOS` in `scenarios.py` with either `scale_to=` or a `patch=` function
-that returns JSON Patch operations, plus its `GroundTruth`. `break`, `restore` and evaluation pick it up automatically.
+that returns JSON Patch operations, plus its `GroundTruth`. `break` and `restore` pick it up automatically.

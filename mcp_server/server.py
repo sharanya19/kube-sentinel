@@ -112,7 +112,9 @@ def list_pods(namespace: str = "default", only_unhealthy: bool = False) -> list[
 @explain
 def describe_pod(name: str, namespace: str = "default") -> dict[str, Any]:
     """Full detail for one pod: container image, env, resource requests/limits, liveness/readiness
-    probes, current and last container state, conditions, and the pod's recent events."""
+    probes, current and last container state, conditions, and the pod's recent events.
+    name can be the exact pod name or the app name (e.g. 'frontend'): for an app, the unhealthy
+    or newest pod is described and the others are listed."""
     return k8s.describe_pod(name, namespace)
 
 

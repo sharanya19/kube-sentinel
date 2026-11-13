@@ -74,8 +74,35 @@ class ModelPool:
                            f"{', '.join(self.names)}. Last error: {_short(last_error)}")
 
 
+def _leaf(e: BaseException) -> BaseException:
+    """The real error inside async wrappers (ExceptionGroup from TaskGroups, chained causes)."""
+    while isinstance(e, BaseExceptionGroup) and e.exceptions:
+        e = e.exceptions[0]
+    return e
+
+
+def explain_error(e: BaseException) -> str:
+    """A plain-English reason an investigation failed, for the UI, CLI and logs."""
+    leaf = _leaf(e)
+    s = f"{leaf} {leaf.__cause__ or ''}"
+    if "prepayment credits" in s or " 402 " in f" {s} ":
+        return ("Gemini billing: this API key's prepaid credits are used up. Add credits in AI Studio "
+                "(Billing) or use another key.")
+    if "API_KEY_INVALID" in s or "API key not valid" in s or "PERMISSION_DENIED" in s:
+        return "Gemini rejected the API key (invalid, expired or without access). Check GOOGLE_API_KEY."
+    if "All Gemini models are unavailable" in s:
+        return str(leaf)
+    if "RESOURCE_EXHAUSTED" in s:
+        return "Gemini quota used up. Try again later, add more models to GEMINI_MODELS, or enable billing."
+    if "UNAVAILABLE" in s or "DEADLINE_EXCEEDED" in s:
+        return "Gemini is overloaded or timing out right now. Try again in a few minutes."
+    return f"{type(leaf).__name__}: {str(leaf)[:300]}"
+
+
 def _short(e: Exception | None) -> str:
     s = str(e)
+    if "prepayment credits" in s:
+        return "prepaid credits depleted"
     for marker in ("RESOURCE_EXHAUSTED", "UNAVAILABLE", "DEADLINE_EXCEEDED", "NOT_FOUND"):
         if marker in s:
             return {"RESOURCE_EXHAUSTED": "daily quota used up", "UNAVAILABLE": "overloaded",

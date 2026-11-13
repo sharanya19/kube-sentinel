@@ -118,6 +118,9 @@ fires several alerts; the watcher waits 45s for related alerts and runs **one** 
   Without this it tended to blame something anyway, e.g. an unused optional setting. The prompt also
   lists this shop's known background noise (rejected `visa_electron` test cards, the optional shopping
   assistant), and says not to restart services that have already recovered.
+- **Readable failures.** If Gemini can't be used (invalid key, quota used up on every model, prepaid
+  credits depleted, overload), the UI, CLI and watcher show the reason in plain words instead of the
+  raw async error.
 - **Tool budget.** At most 20 tool calls (`KUBE_SENTINEL_MAX_TOOL_CALLS`); then the agent must conclude.
 - **No write access.** Fix actions aren't even given to the model. The report names a fix; the approval UI runs it.
 - **Own MCP adapter.** `langchain-mcp-adapters` only supports MCP < 2, so `mcp_tools.py` wraps MCP 2.x tools

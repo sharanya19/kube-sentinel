@@ -152,9 +152,35 @@ def _container_spec(c: client.V1Container) -> dict[str, Any]:
     }
 
 
+def _not_found(name: str, namespace: str, pods: list) -> ValueError:
+    apps = sorted({(p.metadata.labels or {}).get("app") for p in pods} - {None})
+    close = [p.metadata.name for p in pods if p.metadata.name.startswith(name.split("-")[0])][:5]
+    hint = f" Pods with a similar name: {close}." if close else ""
+    return ValueError(f"No pod or app named '{name}' in namespace '{namespace}'.{hint} Apps: {apps}")
+
+
+def _resolve_pod(name: str, namespace: str) -> tuple[client.V1Pod, list[str]]:
+    """A pod by exact name, or the most relevant pod of an app (unhealthy first, then newest)."""
+    try:
+        return core().read_namespaced_pod(name, namespace), []
+    except client.ApiException as e:
+        if e.status != 404:
+            raise
+    pods = core().list_namespaced_pod(namespace).items
+    matches = [p for p in pods if (p.metadata.labels or {}).get("app") == name]
+    if not matches:
+        raise _not_found(name, namespace, pods)
+    matches.sort(key=lambda p: (_pod_summary(p)["healthy"], -p.metadata.creation_timestamp.timestamp()))
+    return matches[0], [p.metadata.name for p in matches[1:]]
+
+
 def describe_pod(name: str, namespace: str = "default") -> dict[str, Any]:
-    p = core().read_namespaced_pod(name, namespace)
+    """Full detail for a pod, given its exact name or its app name (e.g. 'frontend')."""
+    p, others = _resolve_pod(name, namespace)
+    name = p.metadata.name
     out = _pod_summary(p)
+    if others:
+        out["other_pods_of_app"] = others
     out["node"] = p.spec.node_name
     out["containers"] = [_container_spec(c) for c in p.spec.containers]
     out["container_states"] = []
@@ -363,7 +389,7 @@ def get_pod_logs(name: str, namespace: str = "default", tail_lines: int = 50,
     pods = [p for p in api.list_namespaced_pod(namespace).items
             if p.metadata.name == name or (p.metadata.labels or {}).get("app") == name]
     if not pods:
-        raise ValueError(f"No pod or app named '{name}' in namespace '{namespace}'")
+        raise _not_found(name, namespace, api.list_namespaced_pod(namespace).items)
     out = []
     for p in pods:
         try:
