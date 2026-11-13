@@ -51,7 +51,7 @@ async def investigate_now(alerts: list[dict]) -> None:
         on_tool=lambda n, a: print(f"    -> {n}({json.dumps(a) if a else ''})", flush=True))
     r = result["report"]
     log(f"Report {result['id']} ({result['tool_calls']} tool calls, {result['seconds']}s)\n"
-        f"{r.to_text()}\n    saved: {result['path']}")
+        f"{r.to_text()}\n    saved as incident {result['id']}")
 
 
 async def watch(once: bool = False) -> None:

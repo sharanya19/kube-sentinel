@@ -22,7 +22,6 @@ from .models import ModelPool
 from .mcp_tools import mcp_tools
 
 ROOT = Path(__file__).resolve().parent.parent
-REPORTS_DIR = Path(os.environ.get("KUBE_SENTINEL_REPORTS_DIR", ROOT / "reports"))
 
 load_dotenv(ROOT / ".env")
 
@@ -47,10 +46,8 @@ async def run_investigation(alert: str, on_tool: Callable[[str, dict], None] | N
     result["model"] = ", ".join(result["models"])
     result["status"] = "pending_approval"
     if save:
-        REPORTS_DIR.mkdir(exist_ok=True)
-        path = REPORTS_DIR / f"{result['id']}.json"
-        path.write_text(json.dumps(to_json(result), indent=2), encoding="utf-8")
-        result["path"] = str(path)
+        from . import store
+        store.save(to_json(result))
     return result
 
 
@@ -64,7 +61,7 @@ def _check_runbook_citation(report) -> None:
 
 
 def to_json(result: dict) -> dict:
-    out = {k: v for k, v in result.items() if k not in ("report", "path")}
+    out = {k: v for k, v in result.items() if k != "report"}
     out["report"] = result["report"].model_dump()
     out["report"]["suggested_fix"]["command"] = result["report"].suggested_fix.command
     return out

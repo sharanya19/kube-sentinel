@@ -112,7 +112,7 @@ def firing_alerts() -> list[dict]:
             "alert": name,
             "severity": labels.get("severity"),
             "namespace": labels.get("namespace"),
-            "target": labels.get("pod") or labels.get("deployment") or labels.get("app") or labels.get("service"),
+            "target": labels.get("deployment") or labels.get("app") or labels.get("pod") or labels.get("service"),
             "summary": ann.get("summary") or ann.get("description", "")[:200],
             "since": a.get("startsAt"),
             "fingerprint": a.get("fingerprint"),

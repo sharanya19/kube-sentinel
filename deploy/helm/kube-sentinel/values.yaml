@@ -1,0 +1,37 @@
+image:
+  repository: kube-sentinel
+  tag: "0.1.2"
+  pullPolicy: IfNotPresent      # local image built with `minikube image build`
+
+gemini:
+  # Secret holding GOOGLE_API_KEY. Created outside the chart so the key never lives in values files:
+  #   kubectl -n kube-sentinel create secret generic kube-sentinel-gemini --from-literal=GOOGLE_API_KEY=...
+  existingSecret: kube-sentinel-gemini
+  models: ""                    # optional, e.g. "gemini-3.5-flash,gemini-3.5-flash-lite"
+
+watch:
+  enabled: true                 # investigate automatically when shop alerts fire
+  namespace: default            # namespace whose alerts are investigated
+
+actions:
+  enabled: true                 # RBAC for the 3 fix actions (still only run after a human approves)
+  namespaces: [default]         # where fixes may be applied
+
+# Runbooks database (rag/k8s/postgres.yaml) in the release namespace.
+database:
+  host: runbooks-db
+  secret: runbooks-db           # Secret with key "password"
+
+monitoring:
+  prometheusUrl: http://kps-kube-prometheus-stack-prometheus.monitoring.svc:9090
+  lokiUrl: http://loki.monitoring.svc:3100
+  alertmanagerUrl: http://kps-kube-prometheus-stack-alertmanager.monitoring.svc:9093
+
+service:
+  port: 8000                    # ClusterIP only: the UI can change the cluster and has no login yet
+
+resources:
+  # Two Python processes during an investigation (web app + the MCP server it starts, which loads the
+  # embedding model for runbook search). 1Gi was OOMKilled in testing.
+  requests: {cpu: 200m, memory: 768Mi}
+  limits: {memory: 2Gi}

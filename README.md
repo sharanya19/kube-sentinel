@@ -74,6 +74,7 @@ Suggested fix: kubectl scale deployment/redis-cart --replicas=1   [Approve] [Rej
 | Tools | Model Context Protocol (MCP) server |
 | Knowledge | RAG over runbooks: PostgreSQL + pgvector, hybrid search (vector + full-text, RRF), local bge-small embeddings |
 | UI | Approval web app (FastAPI + plain HTML/JS) |
+| Deployment | Docker image, Helm chart, least-privilege RBAC; incidents and runbooks in PostgreSQL |
 
 ## Project structure
 
@@ -87,6 +88,8 @@ kube-sentinel/
 ├── runbooks/     # SRE fix guides the agent searches and cites
 ├── rag/          # Postgres + pgvector, ingest, hybrid search, retrieval eval
 ├── ui/           # Approve / Reject page
+├── deploy/       # Helm chart + install script (runs it inside the cluster)
+├── Dockerfile    # one image: agent + MCP server + UI
 └── docs/         # demo GIF
 ```
 
@@ -135,6 +138,12 @@ Review and approve fixes in the browser:
 python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts automatically
 ```
 
+Or run it **inside the cluster** (always on, its own least-privilege service account), see [deploy/](deploy/):
+
+```bash
+./deploy/install.sh       # build image, create the key Secret, helm install
+```
+
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
@@ -144,6 +153,7 @@ python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts autom
 - [x] AI agent: LangGraph + Gemini investigation loop, alert watcher, fast alert rules ([details](agent/))
 - [x] RAG runbooks: 10 runbooks, hybrid search on Postgres + pgvector, Recall@3 100% ([details](runbooks/))
 - [x] Approval UI: review reports, preview, approve or reject fixes, verified recovery ([details](ui/))
+- [x] In-cluster deployment: container image, Helm chart, least-privilege RBAC, incidents in Postgres, hands-free mode tested ([details](deploy/))
 - [x] Demo GIF
 
 ## Results

@@ -1,0 +1,6 @@
+apiVersion: v2
+name: kube-sentinel
+description: AI SRE agent for Kubernetes - investigates alerts, cites runbooks, applies fixes only after human approval
+type: application
+version: 0.1.2
+appVersion: "0.1.2"

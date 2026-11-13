@@ -7,6 +7,7 @@ Only read-only tools are handed to the LLM; fix actions are left to the approval
 from __future__ import annotations
 
 import json
+import os
 import sys
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
@@ -50,7 +51,11 @@ def _to_langchain(session: ClientSession, tool: Any) -> StructuredTool:
 @asynccontextmanager
 async def mcp_tools(read_only: bool = True) -> AsyncIterator[list[StructuredTool]]:
     """Start the MCP server as a subprocess and yield its tools for the length of the block."""
-    params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server"])
+    # Pass our environment through: the MCP client otherwise starts the server with only a few safe
+    # variables, which drops the in-cluster settings (KUBERNETES_SERVICE_HOST, PROMETHEUS_URL, ...).
+    # KUBE_SENTINEL_ALLOW_ACTIONS is removed so the agent's server never exposes fix actions.
+    env = {k: v for k, v in os.environ.items() if k != "KUBE_SENTINEL_ALLOW_ACTIONS"}
+    params = StdioServerParameters(command=sys.executable, args=["-m", "mcp_server"], env=env)
     async with stdio_client(params) as (read, write):
         async with ClientSession(read, write) as session:
             await session.initialize()

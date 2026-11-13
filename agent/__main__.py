@@ -28,7 +28,7 @@ def main() -> None:
     result = asyncio.run(run_investigation(alert, on_tool=on_tool, on_switch=on_switch))
     print(f"\n{'=' * 70}\n{result['report'].to_text()}\n{'=' * 70}")
     print(f"{result['tool_calls']} tool calls in {result['model_requests']} model requests, {result['seconds']}s, model {result['model']}")
-    print(f"Saved: {result['path']}")
+    print(f"Saved incident {result['id']} (open the approval UI to approve or reject the fix)")
 
 
 if __name__ == "__main__":

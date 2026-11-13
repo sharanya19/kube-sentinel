@@ -1,0 +1,28 @@
+# Never send secrets or local state into the image.
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+kubeconfig*
+credentials*.json
+
+# Local-only folders
+.git/
+.venv/
+venv/
+reports/
+chaos/.state/
+.claude/
+**/__pycache__/
+*.py[cod]
+
+# Not needed at runtime
+docs/
+deploy/
+scripts/
+monitoring/
+chaos/
+**/EGM.md
+*.md
+!runbooks/*.md

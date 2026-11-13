@@ -49,12 +49,13 @@ sequenceDiagram
 
 ## Storage
 
-Reports are JSON files in `reports/` (git-ignored), one per incident, shared with the agent CLI.
-No database: for one cluster and a handful of incidents, files are simpler and easy to inspect.
+Reports live in Postgres (`incidents` table, next to the runbooks), shared with the agent CLI and the in-cluster
+deployment. Approve and Reject are single conditional updates, so a fix can't be approved twice, even from two
+tabs or two replicas. `KUBE_SENTINEL_STORE=files` keeps them as JSON files in `reports/` instead (no database).
 
 | File | Role |
 |---|---|
 | [`server.py`](server.py) | FastAPI app: reports API, approve / reject / preview, live investigations, optional alert watch |
 | [`fixer.py`](fixer.py) | Runs the approved action over MCP, then waits for the deployment to be healthy |
-| [`store.py`](store.py) | Reads and updates report files |
+| [`../agent/store.py`](../agent/store.py) | Incident storage (Postgres, or JSON files as a fallback) |
 | [`static/`](static/) | The page: plain HTML, CSS and JavaScript, no build step |

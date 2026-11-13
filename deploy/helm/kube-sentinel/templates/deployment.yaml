@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "ks.name" . }}
+  labels: {{- include "ks.labels" . | nindent 4 }}
+spec:
+  replicas: 1                   # one watcher; approvals are atomic in Postgres, so >1 UI replica would also be safe
+  selector:
+    matchLabels: {{- include "ks.selector" . | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "ks.selector" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "ks.name" . }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: kube-sentinel
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.gemini.existingSecret }}, key: GOOGLE_API_KEY}
+            {{- with .Values.gemini.models }}
+            - name: GEMINI_MODELS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: RUNBOOKS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.database.secret }}, key: password}
+            # $(VAR) is expanded by Kubernetes from the env var above, so the password stays in the Secret.
+            - name: RUNBOOKS_DATABASE_URL
+              value: "host={{ .Values.database.host }} port=5432 dbname=kube_sentinel user=sentinel password=$(RUNBOOKS_DB_PASSWORD) connect_timeout=10"
+            - name: PROMETHEUS_URL
+              value: {{ .Values.monitoring.prometheusUrl | quote }}
+            - name: LOKI_URL
+              value: {{ .Values.monitoring.lokiUrl | quote }}
+            - name: ALERTMANAGER_URL
+              value: {{ .Values.monitoring.alertmanagerUrl | quote }}
+            - name: KUBE_SENTINEL_UI_WATCH
+              value: {{ ternary "1" "0" .Values.watch.enabled | quote }}
+            - name: KUBE_SENTINEL_NAMESPACE
+              value: {{ .Values.watch.namespace | quote }}
+            - name: KUBE_SENTINEL_ACTION_NAMESPACES
+              value: {{ join "," .Values.actions.namespaces | quote }}
+            - name: KUBE_SENTINEL_INGEST_ON_START
+              value: "1"
+            - name: KUBE_SENTINEL_STORE
+              value: postgres
+            - name: HOME
+              value: /tmp
+          readinessProbe:
+            httpGet: {path: /healthz, port: http}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: http}
+            initialDelaySeconds: 30
+            periodSeconds: 20
+          resources: {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: {drop: [ALL]}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}

@@ -11,6 +11,7 @@ The server listens on 127.0.0.1 only: it can change the cluster, so it is not ex
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime
 import logging
 import os
 import uuid
@@ -23,11 +24,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from agent import store
 from agent import watch as watcher
 from agent.run import run_investigation, to_json
 from mcp_server import k8s
 
-from . import fixer, store
+from . import fixer
 
 STATIC = Path(__file__).parent / "static"
 log = logging.getLogger("kube-sentinel.ui")
@@ -63,6 +65,22 @@ async def start_investigation(alert: str, source: str) -> str:
     return temp_id
 
 
+def _already_investigated(alerts: list[dict]) -> bool:
+    """True if an alert-triggered incident was created after these alerts started.
+
+    The watcher's memory is lost when the pod restarts; Postgres isn't. This stops a restart
+    (or a second replica) from investigating the same incident again and burning LLM quota.
+    """
+    starts = [datetime.fromisoformat(a["since"].replace("Z", "+00:00")) for a in alerts if a.get("since")]
+    if not starts:
+        return False
+    first = min(starts)
+    for r in store.list_reports(limit=20):
+        if r.get("source") == "alertmanager" and datetime.fromisoformat(r["created_at"]) >= first:
+            return True
+    return False
+
+
 async def watch_loop() -> None:
     """Same logic as `python -m agent.watch`, but investigations show up live on the page."""
     seen: set[str] = set()
@@ -75,7 +93,8 @@ async def watch_loop() -> None:
             if current - seen and not busy:
                 await asyncio.sleep(watcher.SETTLE_SECONDS)  # let related alerts arrive
                 alerts = await asyncio.to_thread(watcher.shop_alerts) or alerts
-                await start_investigation(watcher.alert_text(alerts), "alertmanager")
+                if not await asyncio.to_thread(_already_investigated, alerts):
+                    await start_investigation(watcher.alert_text(alerts), "alertmanager")
                 seen |= {a["fingerprint"] for a in alerts}
             elif not current:
                 seen.clear()
@@ -128,6 +147,12 @@ def _cluster_health() -> dict[str, Any]:
         return {"ok": None, "error": f"Can't reach the cluster: {str(e)[:150]}"}
 
 
+@app.get("/healthz")
+def healthz() -> dict[str, str]:
+    """Liveness/readiness check for Kubernetes: the web server is up."""
+    return {"status": "ok"}
+
+
 @app.get("/api/state")
 async def state() -> dict[str, Any]:
     return {"cluster": await asyncio.to_thread(_cluster_health),
@@ -168,13 +193,15 @@ class Decision(BaseModel):
 @app.post("/api/reports/{report_id}/approve")
 async def approve(report_id: str) -> dict[str, Any]:
     rep = _get(report_id)
-    if rep.get("status") != "pending_approval" or report_id in _busy:
-        raise HTTPException(409, f"Report is '{rep.get('status')}', not waiting for approval")
     fix = rep["report"]["suggested_fix"]
     if fix.get("action") not in fixer.ACTIONS:
         raise HTTPException(400, "This report has no automatic fix to approve")
+    # Atomic: only one click (from any tab or replica) can move it out of pending_approval.
+    rep = store.transition(report_id, "pending_approval", status="fixing",
+                           decision={"decision": "approved", "at": store.now()})
+    if rep is None:
+        raise HTTPException(409, f"Report is '{_get(report_id).get('status')}', not waiting for approval")
     _busy.add(report_id)
-    rep = store.update(report_id, status="fixing", decision={"decision": "approved", "at": store.now()})
 
     async def work() -> None:
         try:
@@ -194,11 +221,12 @@ async def approve(report_id: str) -> dict[str, Any]:
 
 @app.post("/api/reports/{report_id}/reject")
 def reject(report_id: str, body: Decision) -> dict[str, Any]:
-    rep = _get(report_id)
-    if rep.get("status") != "pending_approval":
-        raise HTTPException(409, f"Report is '{rep.get('status')}', not waiting for approval")
-    return store.update(report_id, status="rejected",
-                        decision={"decision": "rejected", "at": store.now(), "reason": body.reason})
+    _get(report_id)
+    rep = store.transition(report_id, "pending_approval", status="rejected",
+                           decision={"decision": "rejected", "at": store.now(), "reason": body.reason})
+    if rep is None:
+        raise HTTPException(409, f"Report is '{_get(report_id).get('status')}', not waiting for approval")
+    return rep
 
 
 class InvestigateRequest(BaseModel):

@@ -1,0 +1,12 @@
+Kube-Sentinel is running in namespace {{ .Release.Namespace }}.
+{{- if .Values.watch.enabled }}
+It watches Alertmanager and investigates new alerts in namespace "{{ .Values.watch.namespace }}" automatically.
+{{- end }}
+
+Open the approval UI (it is not exposed outside the cluster on purpose):
+
+  kubectl -n {{ .Release.Namespace }} port-forward svc/{{ include "ks.name" . }} 8090:{{ .Values.service.port }}
+  then visit http://127.0.0.1:8090
+
+Logs:
+  kubectl -n {{ .Release.Namespace }} logs deploy/{{ include "ks.name" . }} -f
