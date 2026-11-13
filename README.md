@@ -2,7 +2,10 @@
 
 **An AI SRE agent for Kubernetes.** When something breaks, Kube-Sentinel investigates the cluster the way an on-call engineer would (pods, events, logs, metrics, recent changes, runbooks), finds the root cause, and suggests a fix that runs only after a human approves it.
 
-> 🚧 **Work in progress.** See the [roadmap](#roadmap) for what's done.
+![Kube-Sentinel demo: a bad config breaks checkout, the agent finds the root cause, a human approves the fix](docs/demo.gif)
+
+*A bad config breaks checkout while every pod still looks healthy. The agent finds the wrong port in 19 seconds,
+cites the matching runbook, and the fix runs only after a human clicks Approve. (Real run; waiting time skipped and captions added.)*
 
 ---
 
@@ -84,7 +87,7 @@ kube-sentinel/
 ├── runbooks/     # SRE fix guides the agent searches and cites
 ├── rag/          # Postgres + pgvector, ingest, hybrid search, retrieval eval
 ├── ui/           # Approve / Reject page
-└── docs/         # diagrams, screenshots
+└── docs/         # demo GIF
 ```
 
 ## Quick start
@@ -141,7 +144,7 @@ python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts autom
 - [x] AI agent: LangGraph + Gemini investigation loop, alert watcher, fast alert rules ([details](agent/))
 - [x] RAG runbooks: 10 runbooks, hybrid search on Postgres + pgvector, Recall@3 100% ([details](runbooks/))
 - [x] Approval UI: review reports, preview, approve or reject fixes, verified recovery ([details](ui/))
-- [ ] Demo GIF
+- [x] Demo GIF
 
 ## Results
 
