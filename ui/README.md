@@ -31,6 +31,21 @@ Investigating -> Waiting for approval -> Applying fix -> Resolved
 
 All incidents are **kept for history**, whatever their status; nothing is deleted.
 
+## When does Kube-Sentinel investigate by itself?
+
+With `--watch` (always on in the cluster) it checks Alertmanager every 20 seconds and investigates:
+
+1. **New alerts:** an alert that wasn't firing before, unless an investigation already covered it
+   (checked in Postgres, so a pod restart doesn't repeat it).
+2. **Alerts that keep firing after their incident ended:** if the last incident for the still-firing
+   alerts was resolved, expired, rejected or fixed by hand at least 10 minutes ago
+   (`KUBE_SENTINEL_RECHECK_MINUTES`), something else is probably wrong, so it investigates again.
+   Example: Redis is fixed by hand while a bad config breaks checkout; both show up as frontend error
+   logs, so no *new* alert fires, but the alert never stops. After a "no incident" conclusion it waits
+   30 minutes before re-checking, so persistent noise doesn't burn LLM quota.
+
+**Investigate now** starts one by hand at any time.
+
 ## Stale-fix guard
 
 A report is a snapshot: its fix was right when the agent wrote it. If the deployment changed afterwards,

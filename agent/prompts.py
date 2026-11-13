@@ -30,6 +30,12 @@ an unusual-looking setting is not a cause unless tool output shows it breaking s
 Rules:
 - Base every conclusion on tool output. Never invent pod names, values or log lines.
 - A deployment scaled to 0 or a service with 0 ready endpoints means nothing is serving it.
+- Exit code 137 alone is NOT out-of-memory: only last_termination reason "OOMKilled" is. 137/143 with
+  reason "Error" means the container was killed or stopped from outside.
+- If cluster_overview shows mass_restart (many pods restarted at the same moment) or node events such
+  as RegisteredNode, the node or cluster restarted. Treat that as ONE event with one cause, not a fault
+  in each app; if everything is healthy again, it has recovered (no fix). Look past it for anything
+  that is still broken NOW (e.g. a deployment scaled to 0), which is a separate incident.
 - If rollout_history says latest_revision_is_rollback=true, that deployment was just RESTORED to an
   earlier working config: it is recovering, not the cause. Old warnings about it may still linger.
 - Prefer evidence that is happening NOW (current pod state, errors in the last few minutes) over

@@ -67,7 +67,7 @@ async def start_investigation(alert: str, source: str) -> str:
 
 
 def _already_investigated(alerts: list[dict]) -> bool:
-    """True if an alert-triggered incident was created after these alerts started.
+    """True if an incident report was created after these alerts started.
 
     The watcher's memory is lost when the pod restarts; Postgres isn't. This stops a restart
     (or a second replica) from investigating the same incident again and burning LLM quota.
@@ -77,9 +77,60 @@ def _already_investigated(alerts: list[dict]) -> bool:
         return False
     first = min(starts)
     for r in store.list_reports(limit=20):
-        if r.get("source") == "alertmanager" and datetime.fromisoformat(r["created_at"]) >= first:
+        # Any investigation since the alerts started counts, whether the watcher or a person started it.
+        if r.get("source") != "test" and datetime.fromisoformat(r["created_at"]) >= first:
             return True
     return False
+
+
+# Longer than the log alert window (5m) + its 1m "for", so a fixed incident's alert can fade first.
+RECHECK_MINUTES = int(os.environ.get("KUBE_SENTINEL_RECHECK_MINUTES", "10"))
+RECHECK_AFTER_NO_INCIDENT_MINUTES = 30
+ENDED = {"resolved", "expired", "rejected", "no_incident", "fix_failed", "blocked"}
+
+
+def _ended_at(r: dict) -> datetime:
+    t = r.get("resolved_at") or (r.get("check") or {}).get("at") or (r.get("decision") or {}).get("at")
+    return datetime.fromisoformat(t or r["created_at"])
+
+
+def _needs_recheck(alerts: list[dict]) -> str | None:
+    """Alerts that keep firing after their incident ended mean something else is wrong.
+
+    Returns a note for the agent when the alerts should be investigated again, else None:
+    - the latest incident for them ended (fixed, expired, rejected, no incident...) RECHECK_MINUTES ago
+      and the alerts are still firing; or
+    - the latest incident is still waiting for approval but its problem is already gone or changed
+      (e.g. someone fixed it by hand) for RECHECK_MINUTES, and the alerts are still firing.
+    After a 'no incident' conclusion it waits longer, so persistent noise doesn't burn LLM quota.
+    """
+    starts = [datetime.fromisoformat(a["since"].replace("Z", "+00:00")) for a in alerts if a.get("since")]
+    if not starts:
+        return None
+    first = min(starts)
+    latest = next((r for r in store.list_reports(limit=20)
+                   if r.get("source") != "test" and datetime.fromisoformat(r["created_at"]) >= first), None)
+    if latest is None:
+        return None  # nothing investigated yet: the normal new-alert path handles it
+    now = datetime.now(timezone.utc)
+    status = latest.get("status")
+    if status in ENDED:
+        wait = RECHECK_AFTER_NO_INCIDENT_MINUTES if status == "no_incident" else RECHECK_MINUTES
+        if now - _ended_at(latest) < timedelta(minutes=wait):
+            return None
+        how = f"was marked '{status}'"
+    elif status == "pending_approval":
+        if now - datetime.fromisoformat(latest["created_at"]) < timedelta(minutes=RECHECK_MINUTES):
+            return None
+        verdict, _ = guard.assess(latest)
+        if verdict == "valid":
+            return None  # still the same open incident, waiting for a human
+        how = "is no longer accurate (its problem is already gone or changed)"
+    else:
+        return None  # fixing, or anything in progress
+    return (f"These alerts are still firing although the previous incident for them "
+            f"('{latest['report']['summary'][:120]}') {how}. Something else may be wrong now: "
+            f"investigate the current state, not the previous incident.")
 
 
 async def watch_loop() -> None:
@@ -94,9 +145,16 @@ async def watch_loop() -> None:
             if current - seen and not busy:
                 await asyncio.sleep(watcher.SETTLE_SECONDS)  # let related alerts arrive
                 alerts = await asyncio.to_thread(watcher.shop_alerts) or alerts
-                if not await asyncio.to_thread(_already_investigated, alerts):
+                # Only the NEW alerts decide whether this incident was already investigated: older
+                # alerts that are still firing must not hide a new, different incident.
+                new = [a for a in alerts if a["fingerprint"] not in seen]
+                if new and not await asyncio.to_thread(_already_investigated, new):
                     await start_investigation(watcher.alert_text(alerts), "alertmanager")
                 seen |= {a["fingerprint"] for a in alerts}
+            elif current and not busy:
+                note = await asyncio.to_thread(_needs_recheck, alerts)
+                if note:
+                    await start_investigation(f"{watcher.alert_text(alerts)}\n{note}", "alertmanager-recheck")
             elif not current:
                 seen.clear()
         except Exception as e:

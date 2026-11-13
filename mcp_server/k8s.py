@@ -380,6 +380,45 @@ def get_events(namespace: str = "default", object_name: str | None = None,
     return rows[:limit]
 
 
+def mass_restart(namespace: str = "default", within_minutes: int = 60, window_seconds: int = 120) -> dict | None:
+    """If several pods' last restart happened at the same moment, that's usually the node or cluster
+    restarting (or a shared dependency), not a problem in each app. Returns a summary, or None."""
+    cutoff = _now().timestamp() - within_minutes * 60
+    ends = []
+    for p in core().list_namespaced_pod(namespace).items:
+        for c in p.status.container_statuses or []:
+            t = c.last_state.terminated if c.last_state else None
+            if t and t.finished_at and t.finished_at.timestamp() >= cutoff:
+                ends.append((t.finished_at.timestamp(), p.metadata.name, t.reason, t.exit_code))
+    ends.sort()
+    best: list = []
+    for i, (t0, *_rest) in enumerate(ends):
+        group = [e for e in ends[i:] if e[0] - t0 <= window_seconds]
+        if len(group) > len(best):
+            best = group
+    if len(best) < 3:
+        return None
+    reasons: dict[str, int] = {}
+    for _, _, reason, code in best:
+        key = f"{reason} (exit {code})"
+        reasons[key] = reasons.get(key, 0) + 1
+    return {
+        "pods_restarted_together": len(best),
+        "at": _iso(datetime.fromtimestamp(best[0][0], timezone.utc)),
+        "last_termination_reasons": reasons,
+        "pods": [e[1] for e in best][:15],
+        "hint": ("Many pods restarted within the same ~2 minutes: usually a node / cluster restart or a "
+                 "shared dependency, not a fault in each app. Check node events. Exit 137/143 with reason "
+                 "'Error' or 'Completed' means the container was stopped/killed, not OOMKilled."),
+    }
+
+
+def node_events(since_minutes: int = 60) -> list[dict]:
+    """Recent events about the node itself (e.g. 'RegisteredNode', 'Starting', 'NodeNotReady')."""
+    return [e for e in get_events("default", since_minutes=since_minutes, limit=200)
+            if e["object"].startswith("Node/")][:10]
+
+
 # ---------- logs ----------
 
 def get_pod_logs(name: str, namespace: str = "default", tail_lines: int = 50,

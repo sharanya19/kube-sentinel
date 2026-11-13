@@ -16,6 +16,12 @@ const STATUS = {
   failed: ["Investigation failed", "bad"],
 };
 
+const SOURCES = {
+  alertmanager: "triggered by Alertmanager",
+  "alertmanager-recheck": "re-checked: alerts still firing after the previous incident ended",
+  reinvestigation: "re-investigation",
+};
+
 let reports = [];
 let running = [];
 let selected = location.hash.slice(1) || null;
@@ -87,7 +93,7 @@ function renderList() {
   const filter = $("#filter").value;
   const items = [
     ...running.map((r) => ({ id: r.id, status: r.error ? "failed" : "investigating",
-      title: r.source === "alertmanager" ? "Alert fired" : "Manual investigation",
+      title: r.source === "alertmanager" ? "Alert fired" : r.source === "alertmanager-recheck" ? "Alert still firing" : "Manual investigation",
       sub: r.alert, time: r.started_at })),
     ...reports.filter((r) => filter === "all" || r.status === filter).map((r) => ({
       id: r.id, status: r.status, time: r.created_at, sub: r.report.summary,
@@ -143,7 +149,7 @@ function renderDetail() {
       ${pill(r.status)}
     </div>
     <div class="meta">
-      ${esc(ago(r.created_at))} · ${r.source === "alertmanager" ? "triggered by Alertmanager" : "started manually"}
+      ${esc(ago(r.created_at))} · ${SOURCES[r.source] || "started manually"}
       · ${r.tool_calls} tool calls in ${r.seconds}s · ${esc(r.model)}
     </div>
 
@@ -300,7 +306,7 @@ function renderRunning(d, run) {
   d.innerHTML = `
     <div class="head"><h1>${run.error ? "Investigation failed" : "Investigating…"}</h1>
       ${pill(run.error ? "failed" : "investigating")}</div>
-    <div class="meta">started ${esc(ago(run.started_at))} · ${run.source === "alertmanager" ? "triggered by Alertmanager" : "started manually"}</div>
+    <div class="meta">started ${esc(ago(run.started_at))} · ${SOURCES[run.source] || "started manually"}</div>
     ${run.error ? `<div class="card"><div class="outcome bad">${esc(run.error)}</div>
         <div class="actions" style="margin-top:10px"><button class="btn" id="dismiss-btn">Dismiss</button></div></div>` : ""}
     <div class="card">

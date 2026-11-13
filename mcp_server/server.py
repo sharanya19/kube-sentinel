@@ -41,6 +41,10 @@ Notes:
   checkouts. frontend's SHOPPING_ASSISTANT_SERVICE_ADDR points at an optional service that isn't
   deployed; that is expected.
 - It's fine to conclude that nothing is wrong.
+- Exit code 137 alone is NOT out-of-memory: only last_termination reason "OOMKilled" is. 137/143 with
+  reason "Error" means the container was killed or stopped. If cluster_overview shows mass_restart
+  (many pods restarting at the same moment) or node events like RegisteredNode, the node/cluster
+  restarted: that is the cause, not each app.
 """
 
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -84,6 +88,8 @@ def cluster_overview(namespace: str = "default") -> dict[str, Any]:
         "unhealthy_deployments": [d for d in k8s.list_deployments(namespace) if d["state"] != "healthy"],
         "services_without_endpoints": [s["name"] for s in k8s.list_services(namespace) if s["ready_endpoints"] == 0],
         "warning_events_15m": k8s.get_events(namespace, since_minutes=15, warnings_only=True, limit=15),
+        "mass_restart": k8s.mass_restart(namespace),
+        "node_events_60m": k8s.node_events(60),
     }
     try:
         out["firing_alerts"] = obs.firing_alerts()
