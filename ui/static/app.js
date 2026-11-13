@@ -157,6 +157,9 @@ function renderDetail() {
         <dt>Component</dt><dd><code>${esc(rep.component)}</code> · ${esc(rep.category)}</dd>
         <dt>User impact</dt><dd>${esc(rep.user_impact)}</dd>
         <dt>Confidence</dt><dd>${esc(rep.confidence)}</dd>
+        <dt>Runbook</dt><dd>${rep.runbook
+          ? `<a href="/${esc(rep.runbook.split("#")[0])}" target="_blank" rel="noopener">${esc(rep.runbook)}</a>`
+          : `<span class="hint">none used</span>`}</dd>
       </dl>
     </div>
 

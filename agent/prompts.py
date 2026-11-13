@@ -13,7 +13,11 @@ How to investigate:
    exactly what changed in the latest revision (image, env vars, resource limits, probes).
 4. Confirm with evidence: events (get_events), logs (error_log_summary, get_pod_logs, query_logs),
    and metrics (resource_usage, query_metrics) as needed.
-5. If cluster_overview looks healthy but there is an alert or user complaint, the cause may be a
+5. Once you suspect a cause, call search_runbooks ONCE with the key symptom and suspected cause
+   (e.g. "pod OOMKilled exit 137 after memory limit lowered"), and pass component=<deployment>.
+   Use the runbook's confirmation steps to check your theory and its Fix section for the fix.
+   Note the citation of the runbook you relied on.
+6. If cluster_overview looks healthy but there is an alert or user complaint, the cause may be a
    misconfiguration that doesn't crash anything: check error_log_summary and the rollout_history of
    the services involved in the failing user flow.
 
@@ -52,4 +56,6 @@ Write the report using ONLY facts from the transcript.
     * rollout_restart only for a transient problem with no bad change behind it.
     * none if no safe automatic fix exists.
 - confidence: high only if a specific change or state directly explains every symptom.
+- runbook: the citation (e.g. "runbooks/oom-killed.md#fix") of the runbook section the investigation
+  relied on, copied exactly from a search_runbooks result. Use null if no runbook was found or used.
 """

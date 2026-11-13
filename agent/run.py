@@ -39,6 +39,7 @@ async def run_investigation(alert: str, on_tool: Callable[[str, dict], None] | N
     async with mcp_tools(read_only=True) as tools:
         result = await investigate(alert, tools, on_tool=on_tool, pool=ModelPool(on_switch=on_switch))
 
+    _check_runbook_citation(result["report"])
     result["id"] = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     result["created_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     result["alert"] = alert
@@ -51,6 +52,15 @@ async def run_investigation(alert: str, on_tool: Callable[[str, dict], None] | N
         path.write_text(json.dumps(to_json(result), indent=2), encoding="utf-8")
         result["path"] = str(path)
     return result
+
+
+def _check_runbook_citation(report) -> None:
+    """Drop a runbook citation that doesn't point at a real runbook file (no made-up sources)."""
+    if not report.runbook:
+        return
+    path = report.runbook.split("#", 1)[0].strip()
+    if not (path.startswith("runbooks/") and path.endswith(".md") and (ROOT / path).is_file()):
+        report.runbook = None
 
 
 def to_json(result: dict) -> dict:

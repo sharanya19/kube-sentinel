@@ -40,6 +40,9 @@ class Report(BaseModel):
     user_impact: str = Field(description="What shoppers experience.")
     suggested_fix: SuggestedFix
     confidence: Literal["high", "medium", "low"]
+    runbook: str | None = Field(default=None, description="Citation of the runbook section used, e.g. "
+                                                          "'runbooks/oom-killed.md#fix', exactly as returned by "
+                                                          "search_runbooks; null if none was used.")
 
     def to_text(self) -> str:
         lines = [
@@ -52,5 +55,6 @@ class Report(BaseModel):
             f"Suggested fix: {self.suggested_fix.command}",
             f"  why: {self.suggested_fix.reason}",
             f"Confidence:  {self.confidence}",
+            f"Runbook:     {self.runbook or '(none)'}",
         ]
         return "\n".join(lines)

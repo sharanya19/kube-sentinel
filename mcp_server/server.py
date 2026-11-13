@@ -30,6 +30,7 @@ Suggested investigation order:
    Check rollout_history whenever a deployment changed recently: most incidents follow a change.
 3. Evidence: get_events, get_pod_logs (previous=true for crashed containers), error_log_summary, query_logs.
 4. Metrics: resource_usage, query_metrics / query_metrics_range for trends.
+5. Runbooks: once you suspect a cause, search_runbooks for the team's confirmation steps and fix.
 
 Notes:
 - A missing pod is as important as a crashing one: a deployment scaled to 0 or a service with
@@ -236,6 +237,24 @@ def query_metrics_range(promql: str, minutes: int = 30, step_seconds: int = 60) 
 def get_firing_alerts() -> list[dict]:
     """Alerts currently firing in Prometheus (the always-on Watchdog heartbeat is excluded)."""
     return obs.firing_alerts()
+
+
+# ---------------- Runbooks (RAG) ----------------
+
+@mcp.tool(annotations=READ)
+@explain
+def search_runbooks(query: str, k: int = 3, category: str | None = None,
+                    component: str | None = None) -> list[dict]:
+    """Search the team's SRE runbooks (hybrid: semantic + keyword). Describe the symptom or suspected
+    cause, e.g. 'pod OOMKilled exit code 137 after memory limit change'. Returns the best runbooks with
+    the matching section, the runbook's Fix section, and a citation to put in the report.
+    Optional filters: category (e.g. 'oom-killed') and component (e.g. 'redis-cart')."""
+    from rag.search import search  # lazy: loads the embedding model on first use
+    hits = search(query, k=max(1, min(k, 5)), category=category, component=component)
+    for h in hits:
+        h["excerpt"] = h["excerpt"][:900]
+        h["fix"] = h["fix"][:900]
+    return hits
 
 
 # ---------------- Actions (opt-in) ----------------

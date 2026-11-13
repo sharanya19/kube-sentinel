@@ -110,6 +110,9 @@ fires several alerts; the watcher waits 45s for related alerts and runs **one** 
 - **Separate investigate and report steps.** Investigating needs free-form tool calling; the report needs a
   strict schema. Doing them in two steps keeps both reliable, and the report writer only sees facts from the
   transcript.
+- **Cited runbooks.** Once it suspects a cause, the agent calls `search_runbooks` once and cites the
+  section it used (`runbooks/oom-killed.md#confirm`). A citation that doesn't match a real runbook file
+  is dropped.
 - **Tool budget.** At most 20 tool calls (`KUBE_SENTINEL_MAX_TOOL_CALLS`); then the agent must conclude.
 - **No write access.** Fix actions aren't even given to the model. The report names a fix; the approval UI runs it.
 - **Own MCP adapter.** `langchain-mcp-adapters` only supports MCP < 2, so `mcp_tools.py` wraps MCP 2.x tools

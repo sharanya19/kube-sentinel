@@ -96,7 +96,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Kube-Sentinel", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def revalidate_page_files(request, call_next):
+    """Make browsers re-check the page's files (ETag) so an updated UI shows up without a hard refresh."""
+    response = await call_next(request)
+    if request.url.path == "/" or request.url.path.startswith(("/static/", "/runbooks/")):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
 app.mount("/static", StaticFiles(directory=STATIC), name="static")
+# Runbooks cited in reports open as plain Markdown.
+app.mount("/runbooks", StaticFiles(directory=STATIC.parent.parent / "runbooks"), name="runbooks")
 
 
 @app.get("/")

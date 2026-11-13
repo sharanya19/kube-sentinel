@@ -1,0 +1,76 @@
+# PostgreSQL 17 with the pgvector extension, for runbook search (RAG).
+# Official open-source image; one replica with a persistent volume. The password lives in the
+# "runbooks-db" Secret, created by rag/install.sh (never stored in the repo).
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: kube-sentinel
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: runbooks-db
+  namespace: kube-sentinel
+  labels: {app: runbooks-db}
+spec:
+  selector: {app: runbooks-db}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: runbooks-db
+  namespace: kube-sentinel
+spec:
+  serviceName: runbooks-db
+  replicas: 1
+  selector:
+    matchLabels: {app: runbooks-db}
+  template:
+    metadata:
+      labels: {app: runbooks-db}
+    spec:
+      securityContext:
+        fsGroup: 999
+      containers:
+        - name: postgres
+          image: pgvector/pgvector:0.8.0-pg17
+          ports:
+            - name: postgres
+              containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              value: kube_sentinel
+            - name: POSTGRES_USER
+              value: sentinel
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef: {name: runbooks-db, key: password}
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          resources:
+            requests: {cpu: 100m, memory: 256Mi}
+            limits: {memory: 512Mi}
+          readinessProbe:
+            exec:
+              command: ["pg_isready", "-U", "sentinel", "-d", "kube_sentinel"]
+            periodSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "sentinel", "-d", "kube_sentinel"]
+            initialDelaySeconds: 20
+            periodSeconds: 15
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

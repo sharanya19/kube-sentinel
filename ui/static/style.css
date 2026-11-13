@@ -86,6 +86,7 @@ select { font: inherit; padding: 4px 6px; border-radius: 6px; border: 1px solid 
 .kv { display: grid; grid-template-columns: 120px 1fr; gap: 6px 14px; }
 .kv dt { color: var(--muted); }
 .kv dd { margin: 0; }
+.kv a { color: var(--accent); }
 .evidence { margin: 0; padding-left: 18px; }
 .evidence li { margin-bottom: 6px; }
 

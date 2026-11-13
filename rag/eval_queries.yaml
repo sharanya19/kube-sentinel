@@ -1,0 +1,42 @@
+# Labelled queries for measuring runbook retrieval: query -> the runbook that should come back.
+# Written the way an on-call engineer (or the agent) would ask, deliberately NOT copied from the
+# runbook text. Three kinds: exact error strings, paraphrases, and mixed symptoms.
+- {query: "pod restarted with exit code 137 reason OOMKilled", expect: oom-killed}
+- {query: "container keeps getting killed because it runs out of RAM", expect: oom-killed}
+- {query: "memory limit was reduced in the last release and now the java service dies on boot", expect: oom-killed}
+- {query: "working set bytes hits the limit right before every restart", expect: oom-killed}
+
+- {query: "ErrImagePull manifest unknown", expect: image-pull-error}
+- {query: "new version never starts because the docker tag does not exist in the registry", expect: image-pull-error}
+- {query: "pull access denied unauthorized for private registry", expect: image-pull-error}
+
+- {query: "deployment has zero replicas, nothing is serving the service", expect: scaled-to-zero}
+- {query: "someone ran kubectl scale to 0 by mistake", expect: scaled-to-zero}
+- {query: "service exists but has no ready endpoints and no pods are crashing", expect: scaled-to-zero}
+
+- {query: "Liveness probe failed: context deadline exceeded", expect: failing-probes}
+- {query: "kubelet keeps restarting a healthy app because the health check hits the wrong port", expect: failing-probes}
+- {query: "pod shows 0/1 ready forever with Readiness probe failed events", expect: failing-probes}
+
+- {query: "all pods healthy but checkout fails with dial tcp i/o timeout on port 50052", expect: wrong-service-address}
+- {query: "after a deploy the service is calling its dependency on the wrong port", expect: wrong-service-address}
+- {query: "PAYMENT_SERVICE_ADDR env var changed and payments stopped working", expect: wrong-service-address}
+
+- {query: "CrashLoopBackOff exit code 1 panic in the logs", expect: crash-loop}
+- {query: "app exits immediately on startup because a required environment variable is missing", expect: crash-loop}
+- {query: "CreateContainerConfigError secret not found", expect: crash-loop}
+
+- {query: "kubectl rollout status hangs and reports ProgressDeadlineExceeded", expect: stuck-rollout}
+- {query: "two replica sets exist, the old one serves traffic and the new pods never become ready", expect: stuck-rollout}
+
+- {query: "RedisConnectionException it was not possible to connect to the redis server", expect: cart-redis}
+- {query: "every page of the shop returns HTTP 500 and the frontend says can't access cart storage", expect: cart-redis}
+- {query: "cartservice cannot reach its database", expect: cart-redis}
+
+- {query: "p99 latency went up but nothing is crashing, CPU is pinned at the limit", expect: cpu-throttling}
+- {query: "high cfs throttled periods for the recommendation service", expect: cpu-throttling}
+- {query: "requests time out under load, need to scale out", expect: cpu-throttling}
+
+- {query: "pod stuck Pending FailedScheduling insufficient memory", expect: pending-pods}
+- {query: "new pods never get assigned to a node because of a taint", expect: pending-pods}
+- {query: "persistent volume claim is unbound so the pod cannot start", expect: pending-pods}

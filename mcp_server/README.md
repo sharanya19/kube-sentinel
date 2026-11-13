@@ -22,7 +22,8 @@ Any MCP client can use it: the Kube-Sentinel agent, the MCP Inspector, or Claude
 | `query_logs` | Any LogQL query against Loki |
 | `resource_usage` | CPU / memory per pod vs limits, throttling, recent restarts |
 | `query_metrics` / `query_metrics_range` | Any PromQL query, instant or over time |
-| `get_firing_alerts` | Alerts currently firing in Prometheus |
+| `get_firing_alerts` | Alerts currently firing (Alertmanager: metric and log alerts) |
+| `search_runbooks` | Hybrid search over the team's runbooks (pgvector + full-text); returns the Fix section and a citation ([details](../runbooks/)) |
 
 **Fix actions (off by default)**
 

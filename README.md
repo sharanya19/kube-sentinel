@@ -30,7 +30,7 @@ flowchart TD
     MCP --> K[Kubernetes API<br/>pods, events, deployments]
     MCP --> P
     MCP --> L
-    AG <-->|search| RAG[Runbooks<br/>vector DB]
+    MCP -->|search_runbooks| RAG[(Runbooks<br/>Postgres + pgvector)]
     AG -->|report + suggested fix| UI[Approval UI]
     UI -->|human clicks Approve| MCP
 ```
@@ -50,6 +50,7 @@ Evidence:
   - deployment redis-cart: 0/0 replicas
   - event: "Scaled down replica set redis-cart to 0"
 All 3 active alerts are caused by this one problem.
+Runbook: runbooks/cart-redis.md#fix
 Suggested fix: kubectl scale deployment/redis-cart --replicas=1   [Approve] [Reject]
 ```
 
@@ -68,7 +69,7 @@ Suggested fix: kubectl scale deployment/redis-cart --replicas=1   [Approve] [Rej
 | Observability | Prometheus, Alertmanager, Grafana, Loki, Grafana Alloy |
 | Agent | Python, LangGraph, Gemini |
 | Tools | Model Context Protocol (MCP) server |
-| Knowledge | RAG over runbooks (vector DB) |
+| Knowledge | RAG over runbooks: PostgreSQL + pgvector, hybrid search (vector + full-text, RRF), local bge-small embeddings |
 | UI | Approval web app (FastAPI + plain HTML/JS) |
 
 ## Project structure
@@ -80,7 +81,8 @@ kube-sentinel/
 ├── chaos/        # scripts that break the shop on purpose (+ undo)
 ├── mcp_server/   # tools the agent uses to read cluster data
 ├── agent/        # LangGraph investigation agent
-├── runbooks/     # fix guides searched with RAG
+├── runbooks/     # SRE fix guides the agent searches and cites
+├── rag/          # Postgres + pgvector, ingest, hybrid search, retrieval eval
 ├── ui/           # Approve / Reject page
 └── docs/         # diagrams, screenshots
 ```
@@ -93,6 +95,7 @@ kube-sentinel/
 minikube start --cpus=6 --memory=10g
 ./scripts/setup.sh          # deploys the shop (Windows: .\scripts\setup.ps1)
 ./monitoring/install.sh     # Prometheus, Grafana, Alertmanager, Loki, Alloy
+./rag/install.sh            # Postgres + pgvector, loads the runbooks (after pip install, below)
 ```
 
 | UI | Command | URL |
@@ -134,9 +137,9 @@ python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts autom
 - [x] Deploy Online Boutique on minikube
 - [x] Monitoring: Prometheus, Grafana, Alertmanager, Loki, Alloy ([details](monitoring/))
 - [x] Failure scripts: 5 failure scenarios with known root causes ([details](chaos/))
-- [x] MCP server: 15 read-only investigation tools + 3 opt-in fix actions ([details](mcp_server/))
+- [x] MCP server: 16 read-only investigation tools + 3 opt-in fix actions ([details](mcp_server/))
 - [x] AI agent: LangGraph + Gemini investigation loop, alert watcher, fast alert rules ([details](agent/))
-- [ ] RAG runbooks
+- [x] RAG runbooks: 10 runbooks, hybrid search on Postgres + pgvector, Recall@3 100% ([details](runbooks/))
 - [x] Approval UI: review reports, preview, approve or reject fixes, verified recovery ([details](ui/))
 - [ ] Demo GIF
 
