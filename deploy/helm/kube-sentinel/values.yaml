@@ -1,6 +1,6 @@
 image:
   repository: kube-sentinel
-  tag: "0.1.2"
+  tag: "0.1.4"
   pullPolicy: IfNotPresent      # local image built with `minikube image build`
 
 gemini:

@@ -9,6 +9,9 @@ const STATUS = {
   resolved: ["Resolved", "ok"],
   fix_failed: ["Fix failed", "bad"],
   rejected: ["Rejected", "muted"],
+  blocked: ["Blocked: cluster changed", "bad"],
+  expired: ["Expired", "muted"],
+  no_incident: ["No incident", "ok"],
   investigating: ["Investigating…", "info"],
   failed: ["Investigation failed", "bad"],
 };
@@ -87,7 +90,8 @@ function renderList() {
       title: r.source === "alertmanager" ? "Alert fired" : "Manual investigation",
       sub: r.alert, time: r.started_at })),
     ...reports.filter((r) => filter === "all" || r.status === filter).map((r) => ({
-      id: r.id, status: r.status, title: r.report.component, sub: r.report.summary, time: r.created_at })),
+      id: r.id, status: r.status, time: r.created_at, sub: r.report.summary,
+      title: r.status === "no_incident" ? "All clear" : r.report.component })),
   ];
   // Redraw only when something changed: replacing the list mid-click would swallow the click.
   const key = JSON.stringify([items, selected, Math.floor(Date.now() / 60000)]);
@@ -144,8 +148,8 @@ function renderDetail() {
     </div>
 
     <div class="card fix">
-      <h3>Suggested fix</h3>
-      <pre>${esc(fix.command)}</pre>
+      <h3>${r.status === "no_incident" ? "Outcome" : "Suggested fix"}</h3>
+      ${r.status === "no_incident" ? "" : `<pre>${esc(fix.command)}</pre>`}
       <p class="why">${esc(fix.reason)}</p>
       <div id="fix-area">${fixArea(r)}</div>
     </div>
@@ -188,7 +192,11 @@ function fixArea(r) {
       return `<div class="outcome muted">No automatic fix: this one needs a human.</div>`;
     }
     const p = previews[r.id];
-    return `
+    const ageMin = (Date.now() - new Date(r.created_at).getTime()) / 60000;
+    const stale = ageMin > 60 ? `<div class="outcome warn" style="margin-bottom:10px">⚠ This report is
+      ${esc(ago(r.created_at).replace(" ago", ""))} old; the cluster may have changed since. Approve re-checks
+      the cluster and dry-runs the fix first, and won't run it if anything changed.</div>` : "";
+    return `${stale}
       <div class="actions">
         <button class="btn" id="preview-btn">Preview (dry run)</button>
         <button class="btn approve" id="approve-btn">Approve &amp; run fix</button>
@@ -205,8 +213,24 @@ function fixArea(r) {
       is healthy again (${r.verification?.seconds ?? "?"}s to recover).</div>`;
   }
   if (r.status === "fix_failed") {
-    const why = r.fix_error || `deployment still '${r.verification?.state}' after ${r.verification?.seconds}s`;
-    return `<div class="outcome bad">✗ The fix did not resolve the incident: ${esc(why)}</div>`;
+    if (r.fix_error || r.fix_applied === false) {
+      return `<div class="outcome bad">✗ The fix couldn't be applied, so nothing was changed.
+        Reason: ${esc(r.fix_error)}</div>${reinvestigateBtn()}`;
+    }
+    return `<div class="outcome bad">✗ The fix was applied, but <code>${esc(fix.deployment)}</code> is still
+      '${esc(r.verification?.state)}' after ${r.verification?.seconds}s. Needs a human.</div>${reinvestigateBtn()}`;
+  }
+  if (r.status === "no_incident") {
+    return `<div class="outcome ok">✓ Nothing to fix: the investigation found no active incident.
+      Kept for the record.</div>`;
+  }
+  if (r.status === "blocked") {
+    return `<div class="outcome bad">⛔ Not run, nothing was changed. ${esc(r.check?.reason || "")}</div>
+      ${reinvestigateBtn()}`;
+  }
+  if (r.status === "expired") {
+    return `<div class="outcome muted">Expired ${esc(ago(r.check?.at))}: ${esc(r.check?.reason || "")}
+      Kept for history; it can't be approved.</div>${reinvestigateBtn()}`;
   }
   if (r.status === "rejected") {
     return `<div class="outcome muted">Rejected ${esc(ago(r.decision?.at))}. Nothing was changed.
@@ -215,8 +239,13 @@ function fixArea(r) {
   return "";
 }
 
+function reinvestigateBtn() {
+  return `<div class="actions" style="margin-top:10px">
+    <button class="btn" id="reinvestigate-btn">Re-investigate</button></div>`;
+}
+
 function previewBox(p) {
-  if (p.error) return `<div class="preview">Preview failed: ${esc(p.error)}</div>`;
+  if (p.error) return `<div class="preview">${esc(p.error)}</div>`;
   let what = "";
   if (p.action === "scale") what = `Scale <code>${esc(p.deployment)}</code> from ${p.from} to ${p.to} replicas.`;
   else if (p.action === "rollout_undo") what = `Roll <code>${esc(p.deployment)}</code> back from revision ${esc(p.from_revision)}
@@ -239,9 +268,19 @@ function bindFixButtons(r) {
     $("#approve-dialog").onclose = async () => {
       if ($("#approve-dialog").returnValue !== "go") return;
       ok.disabled = true;
-      try { await api(`/api/reports/${r.id}/approve`, { method: "POST" }); } catch (e) { alert(e.message); }
+      try { await api(`/api/reports/${r.id}/approve`, { method: "POST" }); }
+      catch (e) { previews[r.id] = { error: e.message }; }
       refresh();
     };
+  };
+  const re = $("#reinvestigate-btn");
+  if (re) re.onclick = async () => {
+    re.disabled = true;
+    try {
+      const { id } = await api(`/api/reports/${r.id}/reinvestigate`, { method: "POST" });
+      selected = id; location.hash = id;
+    } catch (e) { alert(e.message); }
+    refresh();
   };
   if (no) no.onclick = () => {
     $("#reject-reason").value = "";

@@ -39,12 +39,17 @@ async def run_investigation(alert: str, on_tool: Callable[[str, dict], None] | N
         result = await investigate(alert, tools, on_tool=on_tool, pool=ModelPool(on_switch=on_switch))
 
     _check_runbook_citation(result["report"])
+    # Record the target deployment's state now, so the fix can be checked against it before it runs.
+    from . import guard
+    result["baseline"] = guard.snapshot(result["report"].suggested_fix.model_dump())
     result["id"] = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-") + uuid.uuid4().hex[:6]
     result["created_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     result["alert"] = alert
     result["source"] = source
     result["model"] = ", ".join(result["models"])
-    result["status"] = "pending_approval"
+    # Nothing wrong -> nothing to approve; the report is kept for the record.
+    no_incident = result["report"].category == "no-incident"
+    result["status"] = "no_incident" if no_incident else "pending_approval"
     if save:
         from . import store
         store.save(to_json(result))

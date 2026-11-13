@@ -12,11 +12,43 @@ python -m ui --watch      # also investigate automatically when shop alerts fire
 ## What's on the page
 
 - **Shop health** in the header: live, from the cluster (e.g. "1 problem in the shop").
-- **Incidents** on the left, newest first, with status: *Investigating… → Waiting for approval →
-  Applying fix… → Resolved / Fix failed*, or *Rejected*.
+- **Incidents** on the left, newest first, with a status (see the lifecycle below).
 - **A report**: summary, the suggested fix as a command, diagnosis (root cause, component, user impact,
   confidence), evidence, and every tool call the agent made.
 - **Investigate now**: start an investigation from a symptom you type; tool calls appear live.
+
+## Incident lifecycle
+
+```
+Investigating -> No incident   (nothing wrong found: nothing to approve, kept for the record)
+Investigating -> Waiting for approval -> Applying fix -> Resolved
+                       |                       '------> Fix failed (applied, still unhealthy;
+                       |                                 or couldn't be applied: nothing changed)
+                       |-- Reject --------------------> Rejected
+                       |-- cluster changed since -----> Blocked: cluster changed   (Re-investigate)
+                       '-- problem already gone ------> Expired                    (Re-investigate)
+```
+
+All incidents are **kept for history**, whatever their status; nothing is deleted.
+
+## Stale-fix guard
+
+A report is a snapshot: its fix was right when the agent wrote it. If the deployment changed afterwards,
+running the old fix can be useless or harmful (a "roll back one revision" after someone deployed a newer
+fix would re-deploy the broken version). So [`agent/guard.py`](../agent/guard.py):
+
+1. **Records the target deployment's state** when the report is written: a fingerprint of its pod
+   template, its revision and replica count.
+2. **Re-checks it when Approve is clicked**, then **dry-runs** the action. If the deployment changed, the
+   problem is already gone, or the dry run fails, the fix does **not** run and the report becomes
+   *Blocked* or *Expired* with the reason.
+3. **Expires waiting reports older than 60 minutes** (`KUBE_SENTINEL_EXPIRE_MINUTES`) whose problem is
+   gone or whose deployment changed. They stay in history but can't be approved.
+
+Tested against the live cluster: a report written during `bad-config` and approved after a restore was
+**blocked** ("checkoutservice was redeployed after this report (revision 18 -> 19)") with the revision
+untouched; the same report approved while still broken ran and **resolved** it; a "scale redis-cart"
+report approved after Redis was back **expired** ("already scaled back to 1 replica").
 
 ## What happens when you click Approve
 
@@ -44,6 +76,7 @@ sequenceDiagram
 - Fixes go through the **MCP server's allowlist**: 3 actions, allowed namespaces only, replicas capped.
   The UI can't run arbitrary commands.
 - Only reports **waiting for approval** can be approved, and only once (a second click gets HTTP 409).
+- A fix only runs if the cluster still matches the report and a dry run succeeds (stale-fix guard above).
 - Every decision is recorded in the report: approved/rejected, when, the reason, what ran, and whether
   the deployment recovered.
 

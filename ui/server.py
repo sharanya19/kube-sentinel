@@ -11,7 +11,7 @@ The server listens on 127.0.0.1 only: it can change the cluster, so it is not ex
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 import logging
 import os
 import uuid
@@ -24,7 +24,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from agent import store
+from agent import guard, store
 from agent import watch as watcher
 from agent.run import run_investigation, to_json
 from mcp_server import k8s
@@ -103,15 +103,43 @@ async def watch_loop() -> None:
         await asyncio.sleep(watcher.POLL_SECONDS)
 
 
+EXPIRE_MINUTES = int(os.environ.get("KUBE_SENTINEL_EXPIRE_MINUTES", "60"))
+
+
+def expire_old_reports() -> list[str]:
+    """Waiting reports older than EXPIRE_MINUTES whose problem is gone, or whose cluster changed,
+    become 'expired'. Kept for history; they just can't be approved any more."""
+    expired = []
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=EXPIRE_MINUTES)
+    for r in store.list_reports(limit=200):
+        if r.get("status") != "pending_approval" or datetime.fromisoformat(r["created_at"]) > cutoff:
+            continue
+        verdict, reason = guard.assess(r)
+        if verdict != "valid":
+            if store.transition(r["id"], "pending_approval", status="expired", check={
+                    "verdict": verdict, "reason": reason, "at": store.now(), "on": "expiry"}):
+                expired.append(r["id"])
+    return expired
+
+
+async def expire_loop() -> None:
+    while True:
+        try:
+            await asyncio.to_thread(expire_old_reports)
+        except Exception:
+            log.exception("expiry check failed")
+        await asyncio.sleep(60)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    task = None
+    tasks = [asyncio.create_task(expire_loop())]
     if os.environ.get("KUBE_SENTINEL_UI_WATCH") == "1":
         WATCH["enabled"] = True
-        task = asyncio.create_task(watch_loop())
+        tasks.append(asyncio.create_task(watch_loop()))
     yield
-    if task:
-        task.cancel()
+    for t in tasks:
+        t.cancel()
 
 
 app = FastAPI(title="Kube-Sentinel", lifespan=lifespan)
@@ -196,9 +224,29 @@ async def approve(report_id: str) -> dict[str, Any]:
     fix = rep["report"]["suggested_fix"]
     if fix.get("action") not in fixer.ACTIONS:
         raise HTTPException(400, "This report has no automatic fix to approve")
+    if rep.get("status") != "pending_approval":
+        raise HTTPException(409, f"Report is '{rep.get('status')}', not waiting for approval")
+
+    # The report is a snapshot. Before running anything, check the cluster still matches it,
+    # then dry-run the action. Either failing blocks the fix with nothing changed.
+    verdict, reason = await asyncio.to_thread(guard.assess, rep)
+    if verdict != "valid":
+        status = "expired" if verdict == "gone" else "blocked"
+        store.transition(report_id, "pending_approval", status=status, check={"verdict": verdict,
+                         "reason": reason, "at": store.now(), "on": "approve"})
+        raise HTTPException(409, f"Not run, nothing was changed: {reason}")
+    try:
+        preview_result = await fixer.call_action(fix, dry_run=True)
+    except Exception as e:
+        store.transition(report_id, "pending_approval", status="blocked", check={
+            "verdict": "dry_run_failed", "reason": str(e)[:300], "at": store.now(), "on": "approve"})
+        raise HTTPException(409, f"Not run, nothing was changed: the dry run failed ({str(e)[:200]})")
+
     # Atomic: only one click (from any tab or replica) can move it out of pending_approval.
     rep = store.transition(report_id, "pending_approval", status="fixing",
-                           decision={"decision": "approved", "at": store.now()})
+                           decision={"decision": "approved", "at": store.now()},
+                           check={"verdict": "valid", "reason": reason, "at": store.now(), "on": "approve"},
+                           dry_run=preview_result)
     if rep is None:
         raise HTTPException(409, f"Report is '{_get(report_id).get('status')}', not waiting for approval")
     _busy.add(report_id)
@@ -206,12 +254,13 @@ async def approve(report_id: str) -> dict[str, Any]:
     async def work() -> None:
         try:
             result = await fixer.call_action(fix, dry_run=False)
-            store.update(report_id, fix_result=result)
+            store.update(report_id, fix_result=result, fix_applied=True)
             check = await fixer.verify(fix["deployment"])
             store.update(report_id, verification=check, resolved_at=store.now(),
                          status="resolved" if check["healthy"] else "fix_failed")
         except Exception as e:
-            store.update(report_id, status="fix_failed", fix_error=str(e)[:500])
+            # The action raised before or while patching: report it as not applied.
+            store.update(report_id, status="fix_failed", fix_error=str(e)[:500], fix_applied=False)
         finally:
             _busy.discard(report_id)
 
@@ -227,6 +276,15 @@ def reject(report_id: str, body: Decision) -> dict[str, Any]:
     if rep is None:
         raise HTTPException(409, f"Report is '{_get(report_id).get('status')}', not waiting for approval")
     return rep
+
+
+@app.post("/api/reports/{report_id}/reinvestigate")
+async def reinvestigate(report_id: str) -> dict[str, str]:
+    """Start a fresh investigation from the same alert (for blocked or expired reports)."""
+    rep = _get(report_id)
+    if any(not r.get("error") for r in running.values()):
+        raise HTTPException(409, "An investigation is already running")
+    return {"id": await start_investigation(rep["alert"], "reinvestigation")}
 
 
 class InvestigateRequest(BaseModel):

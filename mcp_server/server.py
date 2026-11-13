@@ -36,8 +36,11 @@ Notes:
 - A missing pod is as important as a crashing one: a deployment scaled to 0 or a service with
   0 ready endpoints means nothing is serving it.
 - Errors usually show up first in the CALLER's logs (e.g. frontend), not in the broken service.
-- Some errors are normal background noise in this shop, e.g. paymentservice rejecting
-  "visa_electron" cards and loadgenerator reporting those failed checkouts.
+- Some errors are normal background noise in this shop: paymentservice rejecting "visa_electron"
+  cards (the load generator uses it on purpose) and loadgenerator/frontend reporting those failed
+  checkouts. frontend's SHOPPING_ASSISTANT_SERVICE_ADDR points at an optional service that isn't
+  deployed; that is expected.
+- It's fine to conclude that nothing is wrong.
 """
 
 logging.getLogger("httpx").setLevel(logging.WARNING)

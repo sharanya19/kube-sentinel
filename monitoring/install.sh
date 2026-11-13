@@ -30,6 +30,11 @@ helm upgrade --install alloy grafana/alloy \
 echo "Adding Kube-Sentinel alert rules (metrics + logs)..."
 kubectl apply -f alert-rules.yaml -f loki-rules.yaml
 
+echo "Adding the Kube-Sentinel / Shop overview dashboard to Grafana..."
+kubectl -n monitoring create configmap kube-sentinel-dashboards \
+  --from-file=shop-overview.json=dashboards/shop-overview.json --dry-run=client -o yaml \
+  | kubectl label --local -f - grafana_dashboard=1 -o yaml | kubectl apply -f -
+
 echo
 echo "Done. Open Grafana with:"
 echo "  kubectl port-forward -n monitoring svc/kps-grafana 3000:80"

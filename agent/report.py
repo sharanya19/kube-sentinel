@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 Category = Literal[
     "scaled-to-zero", "misconfiguration", "oom-killed", "image-pull-error", "bad-probe",
     "crash-loop", "resource-exhaustion", "network", "dependency-failure", "unknown",
+    "no-incident",  # the investigation found nothing wrong (only known background noise, or recovered)
 ]
 
 
@@ -31,9 +32,11 @@ class SuggestedFix(BaseModel):
 
 
 class Report(BaseModel):
-    summary: str = Field(description="One sentence a busy engineer can read: what broke and why.")
+    summary: str = Field(description="One sentence a busy engineer can read: what broke and why, "
+                                     "or 'No active incident: ...' when nothing is wrong.")
     root_cause: str = Field(description="The underlying cause, specific (names, values, ports, limits).")
-    component: str = Field(description="The Kubernetes deployment that is the source of the problem.")
+    component: str = Field(description="The Kubernetes deployment that is the source of the problem, "
+                                       "or 'none' when there is no active incident.")
     category: Category = Field(description="Type of failure.")
     evidence: list[str] = Field(description="3-6 concrete facts from tool results that prove the cause, "
                                             "each naming its source (event, log, rollout_history, metric).")
@@ -52,7 +55,7 @@ class Report(BaseModel):
             f"User impact: {self.user_impact}",
             "Evidence:",
             *[f"  - {e}" for e in self.evidence],
-            f"Suggested fix: {self.suggested_fix.command}",
+            f"Suggested fix: {'none needed' if self.category == 'no-incident' else self.suggested_fix.command}",
             f"  why: {self.suggested_fix.reason}",
             f"Confidence:  {self.confidence}",
             f"Runbook:     {self.runbook or '(none)'}",

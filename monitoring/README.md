@@ -44,6 +44,23 @@ kubectl port-forward -n monitoring svc/kps-kube-prometheus-stack-prometheus 9090
 kubectl port-forward -n monitoring svc/loki 3100:3100
 ```
 
+## Dashboard: Kube-Sentinel / Shop overview
+
+Installed by `install.sh` from [`dashboards/shop-overview.json`](dashboards/shop-overview.json) (a ConfigMap
+labelled `grafana_dashboard: "1"`, which Grafana's sidecar loads automatically). Open it under
+**Dashboards → Kube-Sentinel / Shop overview**.
+
+| Panel | Shows |
+|---|---|
+| Status tiles | Deployments down, scaled to zero, pods not ready, restarts (1h), metric alerts firing, error log lines (5m) |
+| Memory per pod / Memory % of limit | Usage over time, and how close each pod is to an OOMKill |
+| CPU per pod / Restarts (per 5m) | Load, and crash loops as they happen |
+| Pods available per deployment | A line dropping to 0 = a service is down |
+| Error log lines per app / Latest error logs | From Loki: where failures surface, and the actual lines |
+
+The built-in **Kubernetes / Compute Resources** dashboards show "No data" for CPU and memory on this setup
+(see the first note below); this dashboard uses per-pod queries so it works on minikube and on real clusters.
+
 ## Useful queries
 
 **Prometheus (PromQL)**
@@ -69,6 +86,8 @@ increase(kube_pod_container_status_restarts_total{namespace="default"}[15m]) > 0
 
 - On minikube with the Docker driver, cAdvisor reports CPU/memory **per pod**, not per container, so
   queries filtering on `container!=""` return nothing. Use `sum by (pod)` as above. Every shop pod has
-  one container, so nothing is lost.
+  one container, so nothing is lost. This is why the built-in Compute Resources dashboards are empty here
+  (their queries require `container` and `image` labels); on clusters using the containerd runtime
+  (GKE, EKS, AKS) they work as-is.
 - etcd, scheduler, controller-manager and kube-proxy scraping is disabled because minikube doesn't
   expose them, which would otherwise fire false "target down" alerts.

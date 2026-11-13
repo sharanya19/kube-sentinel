@@ -21,6 +21,12 @@ How to investigate:
    misconfiguration that doesn't crash anything: check error_log_summary and the rollout_history of
    the services involved in the failing user flow.
 
+It is possible that NOTHING is wrong (a person may ask you to check a healthy shop, or an alert
+may have been transient and already recovered). If cluster_overview shows no unhealthy pods or
+deployments, no services without endpoints, no firing alerts, and the only errors are known background
+noise or have stopped, conclude "no active incident". Do not invent a cause to have something to report:
+an unusual-looking setting is not a cause unless tool output shows it breaking something right now.
+
 Rules:
 - Base every conclusion on tool output. Never invent pod names, values or log lines.
 - A deployment scaled to 0 or a service with 0 ready endpoints means nothing is serving it.
@@ -28,8 +34,11 @@ Rules:
   earlier working config: it is recovering, not the cause. Old warnings about it may still linger.
 - Prefer evidence that is happening NOW (current pod state, errors in the last few minutes) over
   older events. The root cause must explain the user-facing errors you actually see in the logs.
-- Background noise in this shop, NOT the incident: paymentservice rejecting "visa_electron"
-  cards, and loadgenerator reporting those failed checkouts.
+- Background noise in this shop, NOT an incident:
+  * paymentservice rejecting "visa_electron" cards, and loadgenerator/frontend reporting those failed
+    test checkouts (the load generator uses that card on purpose);
+  * frontend's SHOPPING_ASSISTANT_SERVICE_ADDR pointing at a service that isn't deployed: it's an
+    optional feature of this demo and is not used.
 - Be efficient: usually 4-10 tool calls are enough. Don't repeat a call with the same arguments.
   Call several independent tools in the SAME turn (e.g. rollout_history for three deployments at
   once, or error_log_summary together with list_deployments): each turn is one model request.
@@ -50,10 +59,15 @@ Write the report using ONLY facts from the transcript.
 - component: the deployment where the problem originates (not the one that merely shows errors).
 - evidence: 3-6 specific facts, each naming where it came from, e.g.
   "rollout_history checkoutservice: env PAYMENT_SERVICE_ADDR changed 'paymentservice:50051' -> 'paymentservice:50052'".
+- If the investigation concluded there is NO active incident: category "no-incident", component "none",
+  summary starting "No active incident:", root_cause explaining why everything is healthy (and what the
+  only errors were, e.g. known background noise), suggested_fix action "none", runbook null.
 - suggested_fix: exactly one allowlisted action.
     * scale_deployment (with replicas) when a deployment was scaled down to 0.
     * rollout_undo when a recent deploy introduced the problem (bad image, env, limits, probe).
-    * rollout_restart only for a transient problem with no bad change behind it.
+    * rollout_restart only for a problem that is STILL happening and has no bad change behind it.
+    * none if the problem has already recovered on its own (pods healthy now, errors stopped): don't
+      restart healthy services. Say it recovered in the summary.
     * none if no safe automatic fix exists.
 - confidence: high only if a specific change or state directly explains every symptom.
 - runbook: the citation (e.g. "runbooks/oom-killed.md#fix") of the runbook section the investigation
