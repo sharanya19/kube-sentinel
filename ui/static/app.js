@@ -217,7 +217,7 @@ function previewBox(p) {
   let what = "";
   if (p.action === "scale") what = `Scale <code>${esc(p.deployment)}</code> from ${p.from} to ${p.to} replicas.`;
   else if (p.action === "rollout_undo") what = `Roll <code>${esc(p.deployment)}</code> back from revision ${esc(p.from_revision)}
-      to ${esc(p.to_revision)}. This reverts:<ul>${(p.reverts || []).map((c) => `<li><code>${esc(c)}</code></li>`).join("")}</ul>`;
+      to ${esc(p.to_revision)}. This undoes the bad change:<ul>${(p.reverts || []).map((c) => `<li><code>${esc(c)}</code></li>`).join("")}</ul>`;
   else if (p.action === "rollout_restart") what = `Restart all pods of <code>${esc(p.deployment)}</code>.`;
   return `<div class="preview"><b>Dry run, nothing changed yet.</b> ${what}</div>`;
 }

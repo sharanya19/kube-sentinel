@@ -142,7 +142,16 @@ python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts autom
 
 ## Results
 
-Agent results per failure scenario (root cause found, fix, time) are in [agent/](agent/#results).
+| Scenario | What broke | Agent's diagnosis | Fix (after approval) | Time |
+|---|---|---|---|---|
+| `redis-down` | Cart database scaled to 0 | ✅ redis-cart scaled to zero | scale to 1 | 76s |
+| `bad-config` | Checkout points at wrong payment port | ✅ `PAYMENT_SERVICE_ADDR` 50051 → 50052 | rollout undo | 39s |
+| `oom-kill` | Ads service memory limit too low | ✅ OOMKilled, limit 300Mi → 40Mi | rollout undo | 105s |
+| `bad-image` | Image tag that doesn't exist | ✅ ImagePullBackOff, tag v0.10.77 | rollout undo | 155s |
+| `bad-probe` | Health check on the wrong port | ✅ liveness probe port 7000 → 7001 | rollout undo | 43s |
+
+**5 / 5 correct** from the same vague alert ("the shop is not working properly"), 6-16 tool calls each,
+on Gemini's free tier. Every fix was verified healthy after approval. Details in [agent/](agent/#results).
 
 ## License
 

@@ -77,7 +77,14 @@ Confidence:  high
 |---|---|---|---|---|
 | `redis-down` | ✅ redis-cart (scaled-to-zero) | ✅ scale to 1 | 6 | 76s |
 | `bad-config` | ✅ checkoutservice (misconfiguration: port 50052) | ✅ rollout undo | 9 | 39s |
-| `oom-kill`, `bad-image`, `bad-probe` | _pending_ | | | |
+| `oom-kill` | ✅ adservice (oom-killed: memory 300Mi → 40Mi) | ✅ rollout undo | 6 | 105s |
+| `bad-image` | ✅ productcatalogservice (image-pull-error: tag v0.10.77) | ✅ rollout undo | 16 | 155s |
+| `bad-probe` | ✅ currencyservice (bad-probe: liveness port 7001) | ✅ rollout undo | 8 | 43s |
+
+**5 / 5 root causes and fixes correct**, each from the generic alert *"Users report that the shop is not
+working properly"*. The last three were run from the approval UI: the human approved each fix, it ran
+through the MCP server, and the deployment was verified healthy again within 5-10 seconds.
+`oom-kill` was diagnosed correctly even with 7 unrelated "recently restarted" pods right after a cluster reboot.
 
 **A lesson from testing:** in one early run the agent blamed a deployment that had just been *restored*
 from a previous test: its "recent change" was the fix, and its old warnings were still in the event window.

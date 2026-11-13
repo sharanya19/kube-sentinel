@@ -35,7 +35,7 @@ sequenceDiagram
     loop every 5s, up to 4 min
         UI->>K: is the deployment healthy?
     end
-    UI-->>H: Resolved (healthy again in 18s) / Fix failed
+    UI-->>H: Resolved (healthy again in 5-10s) / Fix failed
 ```
 
 ## Safety
