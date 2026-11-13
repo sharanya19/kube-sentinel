@@ -6,11 +6,15 @@ Run it:  python -m mcp_server            (stdio transport, for MCP clients / the
 
 from __future__ import annotations
 
+import functools
+import json
 import logging
 import sys
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
+from mcp.server.mcpserver.exceptions import ToolError
+from kubernetes.client.exceptions import ApiException
 from mcp.types import ToolAnnotations
 
 from . import actions, k8s
@@ -43,9 +47,30 @@ READ = ToolAnnotations(read_only_hint=True, destructive_hint=False, idempotent_h
 WRITE = ToolAnnotations(read_only_hint=False, destructive_hint=True, idempotent_hint=False, open_world_hint=False)
 
 
+def explain(fn):
+    """Return the real reason to the caller (e.g. "pod not found") instead of a generic tool error."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        try:
+            return fn(*args, **kwargs)
+        except ToolError:
+            raise
+        except Exception as e:
+            reason = str(e)
+            if isinstance(e, ApiException):  # Kubernetes errors carry a JSON body with the real message
+                try:
+                    reason = json.loads(e.body)["message"]
+                except Exception:
+                    reason = getattr(e, "reason", None) or reason
+            raise ToolError(f"{fn.__name__} failed: {reason}") from e
+    return wrapper
+
+
 # ---------------- triage ----------------
 
 @mcp.tool(annotations=READ)
+
+@explain
 def cluster_overview(namespace: str = "default") -> dict[str, Any]:
     """Start here. One-call health check: unhealthy pods, deployments that aren't fully healthy,
     services with no ready endpoints, firing alerts, and warning events from the last 15 minutes."""
@@ -69,6 +94,8 @@ def cluster_overview(namespace: str = "default") -> dict[str, Any]:
 # ---------------- Kubernetes ----------------
 
 @mcp.tool(annotations=READ)
+
+@explain
 def list_pods(namespace: str = "default", only_unhealthy: bool = False) -> list[dict]:
     """List pods with ready count, status (e.g. CrashLoopBackOff, ImagePullBackOff), restarts,
     and the last termination reason (e.g. OOMKilled, exit code 137)."""
@@ -76,6 +103,9 @@ def list_pods(namespace: str = "default", only_unhealthy: bool = False) -> list[
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def describe_pod(name: str, namespace: str = "default") -> dict[str, Any]:
     """Full detail for one pod: container image, env, resource requests/limits, liveness/readiness
     probes, current and last container state, conditions, and the pod's recent events."""
@@ -83,6 +113,9 @@ def describe_pod(name: str, namespace: str = "default") -> dict[str, Any]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def list_deployments(namespace: str = "default") -> list[dict]:
     """List deployments with desired/ready/updated/available replicas, image, and a plain-English
     state such as 'healthy', 'scaled to zero' or 'rollout in progress / stuck'."""
@@ -90,6 +123,9 @@ def list_deployments(namespace: str = "default") -> list[dict]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def describe_deployment(name: str, namespace: str = "default") -> dict[str, Any]:
     """Full detail for one deployment: replicas, rollout state, current revision, container
     image / env / resources / probes, and deployment conditions."""
@@ -97,6 +133,9 @@ def describe_deployment(name: str, namespace: str = "default") -> dict[str, Any]
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def rollout_history(name: str, namespace: str = "default") -> dict[str, Any]:
     """Recent revisions of a deployment (newest first, with creation time) and exactly what changed
     in the latest revision: image, env vars, resource limits, probes. Use it to find bad deploys."""
@@ -104,6 +143,9 @@ def rollout_history(name: str, namespace: str = "default") -> dict[str, Any]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def list_services(namespace: str = "default") -> list[dict]:
     """List services with ports and how many ready endpoints (backing pods) each has.
     ready_endpoints = 0 means calls to that service will fail."""
@@ -111,6 +153,9 @@ def list_services(namespace: str = "default") -> list[dict]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def get_events(namespace: str = "default", object_name: str | None = None, since_minutes: int = 60,
                warnings_only: bool = False) -> list[dict]:
     """Kubernetes events, newest first: scaling, pod kills, failed image pulls, failed probes,
@@ -119,6 +164,9 @@ def get_events(namespace: str = "default", object_name: str | None = None, since
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def get_pod_logs(name: str, namespace: str = "default", tail_lines: int = 50, previous: bool = False,
                  contains: str | None = None) -> list[dict]:
     """Recent log lines straight from Kubernetes for a pod, or for all pods of an app
@@ -130,6 +178,8 @@ def get_pod_logs(name: str, namespace: str = "default", tail_lines: int = 50, pr
 # ---------------- Logs (Loki) ----------------
 
 @mcp.tool(annotations=READ)
+
+@explain
 def error_log_summary(namespace: str = "default", since_minutes: int = 15) -> list[dict]:
     """Which apps are logging errors (error / exception / refused / timeout ...), how many lines,
     and a few example lines each. Good for finding where failures surface."""
@@ -137,6 +187,9 @@ def error_log_summary(namespace: str = "default", since_minutes: int = 15) -> li
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def query_logs(logql: str, since_minutes: int = 30, limit: int = 50) -> dict[str, Any]:
     """Search logs in Loki with LogQL. Labels: namespace, app, pod, container; Kubernetes events
     are under {job=~".*kubernetes-events.*"}. Examples:
@@ -147,6 +200,8 @@ def query_logs(logql: str, since_minutes: int = 30, limit: int = 50) -> dict[str
 # ---------------- Metrics (Prometheus) ----------------
 
 @mcp.tool(annotations=READ)
+
+@explain
 def resource_usage(namespace: str = "default") -> list[dict]:
     """Per-pod CPU (cores) and memory (MiB) next to their limits, CPU throttling %,
     and restarts in the last 15 minutes."""
@@ -154,6 +209,9 @@ def resource_usage(namespace: str = "default") -> list[dict]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def query_metrics(promql: str) -> dict[str, Any]:
     """Run an instant PromQL query. Metrics are per pod (use `sum by (pod)`), e.g.
     kube_deployment_status_replicas_available{namespace="default"}
@@ -162,6 +220,9 @@ def query_metrics(promql: str) -> dict[str, Any]:
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def query_metrics_range(promql: str, minutes: int = 30, step_seconds: int = 60) -> dict[str, Any]:
     """Run a PromQL query over the last N minutes and get first/last/min/max plus recent points,
     to see WHEN something changed (e.g. replicas dropping from 1 to 0)."""
@@ -169,6 +230,9 @@ def query_metrics_range(promql: str, minutes: int = 30, step_seconds: int = 60) 
 
 
 @mcp.tool(annotations=READ)
+
+
+@explain
 def get_firing_alerts() -> list[dict]:
     """Alerts currently firing in Prometheus (the always-on Watchdog heartbeat is excluded)."""
     return obs.firing_alerts()
@@ -178,17 +242,22 @@ def get_firing_alerts() -> list[dict]:
 
 if actions.enabled():
     @mcp.tool(annotations=WRITE)
+    @explain
     def scale_deployment(name: str, replicas: int, namespace: str = "default", dry_run: bool = True) -> dict:
         """CHANGES THE CLUSTER. Scale a deployment (0-5 replicas). Only call after human approval.
         dry_run=true (default) only describes what would happen."""
         return actions.scale_deployment(name, replicas, namespace, dry_run)
 
     @mcp.tool(annotations=WRITE)
+
+    @explain
     def rollout_restart(name: str, namespace: str = "default", dry_run: bool = True) -> dict:
         """CHANGES THE CLUSTER. Restart all pods of a deployment. Only call after human approval."""
         return actions.rollout_restart(name, namespace, dry_run)
 
     @mcp.tool(annotations=WRITE)
+
+    @explain
     def rollout_undo(name: str, namespace: str = "default", dry_run: bool = True) -> dict:
         """CHANGES THE CLUSTER. Roll a deployment back to its previous revision (like
         `kubectl rollout undo`). Only call after human approval."""

@@ -57,7 +57,7 @@ Suggested fix: kubectl scale deployment/redis-cart --replicas=1   [Approve] [Rej
 
 - **Read-only by default.** The MCP server's investigation tools can only read cluster state.
 - **Allowlisted fixes.** Only a small set of actions (scale, rollout restart, rollout undo) can be suggested.
-- **Human in the loop.** No change is applied without explicit approval.
+- **Human in the loop.** No change is applied without explicit approval in the [approval UI](ui/), and every fix is verified afterwards.
 
 ## Tech stack
 
@@ -69,7 +69,7 @@ Suggested fix: kubectl scale deployment/redis-cart --replicas=1   [Approve] [Rej
 | Agent | Python, LangGraph, Gemini |
 | Tools | Model Context Protocol (MCP) server |
 | Knowledge | RAG over runbooks (vector DB) |
-| UI | Approval web page |
+| UI | Approval web app (FastAPI + plain HTML/JS) |
 
 ## Project structure
 
@@ -99,6 +99,7 @@ minikube start --cpus=6 --memory=10g
 |---|---|---|
 | Shop | `kubectl port-forward svc/frontend 8080:80` | http://localhost:8080 |
 | Grafana | `kubectl port-forward -n monitoring svc/kps-grafana 3000:80` | http://localhost:3000 (admin / kube-sentinel) |
+| Approval UI | `python -m ui --watch` | http://127.0.0.1:8000 |
 
 Break something on purpose, and put it back:
 
@@ -122,6 +123,12 @@ python -m agent "Frontend is returning errors"   # one investigation
 python -m agent.watch                            # investigate automatically when alerts fire
 ```
 
+Review and approve fixes in the browser:
+
+```bash
+python -m ui --watch      # http://127.0.0.1:8000, investigates new alerts automatically
+```
+
 ## Roadmap
 
 - [x] Deploy Online Boutique on minikube
@@ -130,7 +137,7 @@ python -m agent.watch                            # investigate automatically whe
 - [x] MCP server: 15 read-only investigation tools + 3 opt-in fix actions ([details](mcp_server/))
 - [x] AI agent: LangGraph + Gemini investigation loop, alert watcher, fast alert rules ([details](agent/))
 - [ ] RAG runbooks
-- [ ] Approval UI
+- [x] Approval UI: review reports, preview, approve or reject fixes, verified recovery ([details](ui/))
 - [ ] Demo GIF
 
 ## Results

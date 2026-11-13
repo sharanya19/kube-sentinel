@@ -35,3 +35,6 @@ chaos/.state/
 
 # agent investigation reports (local output)
 reports/
+
+# local editor / assistant tooling
+.claude/

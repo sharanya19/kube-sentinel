@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kube-Sentinel</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">◆</span>
+      <span>Kube-Sentinel</span>
+      <span class="tag">approval console</span>
+    </div>
+    <div class="topbar-right">
+      <span id="watch" class="pill muted" hidden></span>
+      <span id="health" class="pill muted">Checking cluster…</span>
+      <button id="investigate-btn" class="btn">Investigate now</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <div class="sidebar-head">
+        <h2>Incidents</h2>
+        <select id="filter" aria-label="Filter incidents">
+          <option value="all">All</option>
+          <option value="pending_approval">Waiting for approval</option>
+          <option value="resolved">Resolved</option>
+          <option value="rejected">Rejected</option>
+        </select>
+      </div>
+      <ul id="list" class="list"></ul>
+    </aside>
+
+    <section id="detail" class="detail">
+      <div class="empty">
+        <p class="empty-title">No incident selected</p>
+        <p>When an alert fires, the agent investigates and its report appears on the left.
+           Break something with <code>python chaos/chaos.py break redis-down</code>, then click
+           <b>Investigate now</b>.</p>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="investigate-dialog">
+    <form method="dialog" id="investigate-form">
+      <h3>Start an investigation</h3>
+      <p class="hint">Describe the symptom, like an alert or a user complaint. The agent doesn't know what's broken.</p>
+      <textarea id="alert-text" rows="3">Users report that the Online Boutique shop is not working properly.</textarea>
+      <p class="hint">Uses about 5–12 Gemini requests.</p>
+      <div class="row-end">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="go" class="btn primary">Investigate</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="approve-dialog">
+    <form method="dialog">
+      <h3>Run this fix on the cluster?</h3>
+      <p class="hint">This changes the live cluster through the MCP server's allowlisted actions.</p>
+      <pre id="approve-command" class="cmd"></pre>
+      <div class="row-end">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="go" class="btn approve">Yes, run it</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="reject-dialog">
+    <form method="dialog">
+      <h3>Reject this fix?</h3>
+      <p class="hint">Nothing will be changed in the cluster. Optionally say why.</p>
+      <textarea id="reject-reason" rows="2" placeholder="e.g. wrong root cause, will fix manually"></textarea>
+      <div class="row-end">
+        <button value="cancel" class="btn ghost">Cancel</button>
+        <button value="go" class="btn danger">Reject</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
